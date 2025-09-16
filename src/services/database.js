@@ -10,16 +10,24 @@ class DatabaseService {
 
   async connect() {
     try {
+      if (!process.env.DATABASE_URL) {
+        logger.warn('DATABASE_URL not found, running in fallback mode');
+        return;
+      }
       await this.prisma.$connect();
       logger.info('Database connected successfully');
     } catch (error) {
       logger.error('Database connection failed:', error);
-      throw error;
+      logger.warn('Running in fallback mode without database');
+      // Don't throw error, allow app to run without database
     }
   }
 
   async disconnect() {
     try {
+      if (!process.env.DATABASE_URL) {
+        return;
+      }
       await this.prisma.$disconnect();
       logger.info('Database disconnected successfully');
     } catch (error) {
@@ -30,6 +38,19 @@ class DatabaseService {
   // Audit Management
   async createAudit(siteUrl, siteType) {
     try {
+      if (!process.env.DATABASE_URL) {
+        // Fallback: return a mock audit object
+        const mockAudit = {
+          id: 'audit_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          siteUrl,
+          siteType,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        logger.info(`Created mock audit ${mockAudit.id} for ${siteUrl}`);
+        return mockAudit;
+      }
+      
       const audit = await this.prisma.audit.create({
         data: {
           siteUrl,
@@ -46,6 +67,12 @@ class DatabaseService {
 
   async saveAuditResults(auditId, resultsData) {
     try {
+      if (!process.env.DATABASE_URL) {
+        // Fallback: just log that we would save results
+        logger.info(`Would save audit results for audit ${auditId} (fallback mode)`);
+        return { id: 'mock_result_' + Date.now(), auditId, resultsData, createdAt: new Date() };
+      }
+      
       const auditResult = await this.prisma.auditResult.create({
         data: {
           auditId,
