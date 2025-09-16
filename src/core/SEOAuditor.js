@@ -359,10 +359,15 @@ class SEOAuditor {
         url: this.siteUrl,
         strategy: 'mobile',
         key: process.env.GOOGLE_API_KEY,
-        category: ['PERFORMANCE', 'ACCESSIBILITY', 'BEST_PRACTICES', 'SEO']
+        category: 'performance,accessibility,best-practices,seo'
       };
 
-      logger.info('Calling PageSpeed API with params:', { url: this.siteUrl, hasKey: !!params.key });
+      logger.info('Calling PageSpeed API with params:', { 
+        url: this.siteUrl, 
+        hasKey: !!params.key,
+        category: params.category,
+        strategy: params.strategy
+      });
 
       const response = await axios.get(apiUrl, { 
         params,
@@ -377,6 +382,13 @@ class SEOAuditor {
       if (!data) {
         throw new Error('No data received from PageSpeed API');
       }
+
+      // Debug: Log the raw API response structure
+      logger.info('PageSpeed API raw response:', {
+        hasLighthouseResult: !!data.lighthouseResult,
+        categoriesKeys: data.lighthouseResult ? Object.keys(data.lighthouseResult.categories || {}) : [],
+        responseKeys: Object.keys(data)
+      });
 
       if (data.error) {
         throw new Error(`PageSpeed API error: ${data.error.message || 'Unknown error'}`);
