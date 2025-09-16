@@ -510,6 +510,7 @@
                 
                 this.init();
                 this.checkAuthStatus();
+                this.loadAuditFromUrl();
             }
 
             async init() {
@@ -536,6 +537,71 @@
                 } catch (error) {
                     window.location.href = '/login';
                 }
+            }
+
+            async loadAuditFromUrl() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const auditId = urlParams.get('auditId');
+                
+                if (auditId) {
+                    console.log('Loading audit from URL:', auditId);
+                    await this.loadExistingAudit(auditId);
+                }
+            }
+
+            async loadExistingAudit(auditId) {
+                try {
+                    this.showLoading(true);
+                    this.hideResults();
+                    
+                    const response = await fetch(`/api/audit/${auditId}`, {
+                        credentials: 'include'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to load audit');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.success && data.results) {
+                        console.log('Loaded audit results:', data);
+                        this.showAuditHeader(data.audit);
+                        this.displayResults(data.results);
+                        this.showResults();
+                    } else {
+                        throw new Error('No results found');
+                    }
+                } catch (error) {
+                    console.error('Error loading audit:', error);
+                    this.showError('Failed to load audit results. Please try again.');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            showAuditHeader(audit) {
+                // Create or update audit header
+                let headerDiv = document.getElementById('auditHeader');
+                if (!headerDiv) {
+                    headerDiv = document.createElement('div');
+                    headerDiv.id = 'auditHeader';
+                    headerDiv.style.cssText = 'background: #f8f9fa; padding: 1rem; margin: 1rem 0; border-radius: 5px; border-left: 4px solid #667eea;';
+                    this.form.parentNode.insertBefore(headerDiv, this.form.nextSibling);
+                }
+                
+                const auditDate = new Date(audit.createdAt).toLocaleDateString();
+                headerDiv.innerHTML = `
+                    <h3 style="margin: 0 0 0.5rem 0; color: #333;">
+                        <i class="fas fa-chart-line"></i> Viewing Audit Results
+                    </h3>
+                    <p style="margin: 0; color: #666;">
+                        <strong>Site:</strong> ${audit.siteUrl} | 
+                        <strong>Type:</strong> ${audit.siteType} | 
+                        <strong>Date:</strong> ${auditDate}
+                    </p>
+                `;
+                headerDiv.style.display = 'block';
             }
 
             initTabs() {
@@ -594,17 +660,39 @@
                 }
             }
 
-            showLoading() {
-                this.loading.style.display = 'block';
-                this.results.style.display = 'none';
-                this.auditBtn.disabled = true;
-                this.auditBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            showLoading(show = true) {
+                if (show) {
+                    this.loading.style.display = 'block';
+                    this.results.style.display = 'none';
+                    this.auditBtn.disabled = true;
+                    this.auditBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+                } else {
+                    this.hideLoading();
+                }
             }
 
             hideLoading() {
                 this.loading.style.display = 'none';
                 this.auditBtn.disabled = false;
                 this.auditBtn.innerHTML = '<i class="fas fa-play"></i> Start SEO Audit';
+            }
+
+            hideResults() {
+                this.results.style.display = 'none';
+            }
+
+            showError(message) {
+                // Create or update error message
+                let errorDiv = document.getElementById('errorMessage');
+                if (!errorDiv) {
+                    errorDiv = document.createElement('div');
+                    errorDiv.id = 'errorMessage';
+                    errorDiv.className = 'error-message';
+                    errorDiv.style.cssText = 'background: #fee; color: #c33; padding: 1rem; margin: 1rem 0; border-radius: 5px; display: block;';
+                    this.form.parentNode.insertBefore(errorDiv, this.form.nextSibling);
+                }
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
             }
 
             simulateProgress() {
