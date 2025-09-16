@@ -811,6 +811,15 @@
                         const bpScore = technical.pageSpeed.bestPractices?.score || 0;
                         const seoScore = technical.pageSpeed.seo?.score || 0;
                         
+                        // Debug logging
+                        console.log('PageSpeed scores:', {
+                            performance: perfScore,
+                            accessibility: accScore,
+                            bestPractices: bpScore,
+                            seo: seoScore,
+                            rawData: technical.pageSpeed
+                        });
+                        
                         const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
                         
                         html += `

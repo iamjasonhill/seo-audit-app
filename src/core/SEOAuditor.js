@@ -358,7 +358,8 @@ class SEOAuditor {
       const params = {
         url: this.siteUrl,
         strategy: 'mobile',
-        key: process.env.GOOGLE_API_KEY
+        key: process.env.GOOGLE_API_KEY,
+        category: ['PERFORMANCE', 'ACCESSIBILITY', 'BEST_PRACTICES', 'SEO']
       };
 
       logger.info('Calling PageSpeed API with params:', { url: this.siteUrl, hasKey: !!params.key });
@@ -386,6 +387,15 @@ class SEOAuditor {
       if (!lighthouseResult) {
         throw new Error('No Lighthouse result from PageSpeed API');
       }
+
+      // Debug: Log the categories we received
+      logger.info('PageSpeed API categories received:', {
+        categories: Object.keys(lighthouseResult.categories || {}),
+        performanceScore: lighthouseResult.categories?.performance?.score,
+        accessibilityScore: lighthouseResult.categories?.accessibility?.score,
+        bestPracticesScore: lighthouseResult.categories?.['best-practices']?.score,
+        seoScore: lighthouseResult.categories?.seo?.score
+      });
 
       const extra = {};
       if (data.analysisUTCTimestamp) {
