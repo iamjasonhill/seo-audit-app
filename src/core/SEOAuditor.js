@@ -1,7 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const puppeteer = require('puppeteer');
-const lighthouse = require('lighthouse');
 const robotsParser = require('robots-parser');
 const { URL } = require('url');
 const logger = require('../utils/logger');
@@ -176,8 +175,11 @@ class SEOAuditor {
         args: ['--no-sandbox', '--disable-setuid-sandbox']
       });
       
+      // Import Lighthouse dynamically (ES Module)
+      const lighthouse = await import('lighthouse');
+      
       // Run Lighthouse with proper configuration
-      const lighthouseResult = await lighthouse(this.siteUrl, {
+      const lighthouseResult = await lighthouse.default(this.siteUrl, {
         port: new URL(browser.wsEndpoint()).port,
         output: 'json',
         logLevel: 'error'
