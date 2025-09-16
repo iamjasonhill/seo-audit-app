@@ -175,6 +175,11 @@ class SEOAuditor {
       if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
         try {
           logger.info('Using PageSpeed Insights API for serverless environment');
+          logger.info('Environment variables check:', {
+            NODE_ENV: process.env.NODE_ENV,
+            VERCEL: process.env.VERCEL,
+            hasGoogleKey: !!process.env.GOOGLE_API_KEY
+          });
           return await this.runPageSpeedInsightsAPI();
         } catch (apiError) {
           logger.warn('PageSpeed API failed, using fallback response:', apiError.message);
@@ -351,9 +356,20 @@ class SEOAuditor {
 
   async runPageSpeedInsightsAPI() {
     try {
+      // Debug: Log environment variables
+      logger.info('Environment check:', { 
+        hasGoogleKey: !!process.env.GOOGLE_API_KEY,
+        keyLength: process.env.GOOGLE_API_KEY?.length || 0,
+        keyPrefix: process.env.GOOGLE_API_KEY?.substring(0, 10) || 'none'
+      });
+
       // Check if we have a valid API key
-      if (!process.env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY === 'demo') {
-        throw new Error('No valid Google API key configured');
+      if (!process.env.GOOGLE_API_KEY) {
+        throw new Error('No Google API key found in environment variables');
+      }
+      
+      if (process.env.GOOGLE_API_KEY === 'demo' || process.env.GOOGLE_API_KEY.length < 10) {
+        throw new Error('Invalid Google API key format');
       }
 
       // Use Google's PageSpeed Insights API (no browser required)
