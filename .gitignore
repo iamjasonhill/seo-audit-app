@@ -103,3 +103,4 @@ temp/
 .env.backup
 .env.production
 .env.tmp
+cookies.txt

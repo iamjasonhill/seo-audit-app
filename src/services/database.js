@@ -98,20 +98,20 @@ class DatabaseService {
       // Extract key metrics for trending
       if (resultsData.technical?.pageSpeed) {
         const ps = resultsData.technical.pageSpeed;
-        if (ps.performance) historyEntries.push({
+        if (ps.performance?.score !== undefined) historyEntries.push({
           auditId,
           metricName: 'performance_score',
-          metricValue: ps.performance,
+          metricValue: ps.performance.score,
         });
-        if (ps.accessibility) historyEntries.push({
+        if (ps.accessibility?.score !== undefined) historyEntries.push({
           auditId,
           metricName: 'accessibility_score',
-          metricValue: ps.accessibility,
+          metricValue: ps.accessibility.score,
         });
-        if (ps.seo) historyEntries.push({
+        if (ps.seo?.score !== undefined) historyEntries.push({
           auditId,
           metricName: 'seo_score',
-          metricValue: ps.seo,
+          metricValue: ps.seo.score,
         });
       }
 

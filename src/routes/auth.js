@@ -90,8 +90,7 @@ router.get('/status', (req, res, next) => {
     logger.info('Auth status check:', {
       hasAuthHeader: !!req.headers.authorization,
       hasTokenCookie: !!req.cookies?.token,
-      tokenLength: token?.length || 0,
-      cookies: Object.keys(req.cookies || {})
+      tokenLength: token?.length || 0
     });
     
     if (!token) {
