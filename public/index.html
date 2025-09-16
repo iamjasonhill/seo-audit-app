@@ -746,7 +746,10 @@
 
             updateOverview(data) {
                 // Update metrics
-                const pageSpeed = data.technical?.pageSpeed?.performance?.score || data.technical?.pageSpeed?.performance || 0;
+                const pageSpeedPerformance = data.technical?.pageSpeed?.performance;
+                const pageSpeed = typeof pageSpeedPerformance === 'number'
+                    ? pageSpeedPerformance
+                    : pageSpeedPerformance?.score ?? 0;
                 const mobileScore = data.technical?.mobileResponsive?.isResponsive ? 85 : 45;
                 const seoScore = data.technical?.pageSpeed?.seo?.score || 0;
                 const issuesCount = data.roadmap?.issues?.length || 0;
@@ -800,7 +803,10 @@
                         `;
                     } else {
                         // Handle normal Lighthouse/API response
-                        const perfScore = technical.pageSpeed.performance?.score || technical.pageSpeed.performance;
+                        const pageSpeedPerformance = technical.pageSpeed.performance;
+                        const perfScore = typeof pageSpeedPerformance === 'number'
+                            ? pageSpeedPerformance
+                            : pageSpeedPerformance?.score ?? 0;
                         const accScore = technical.pageSpeed.accessibility?.score || 0;
                         const bpScore = technical.pageSpeed.bestPractices?.score || 0;
                         const seoScore = technical.pageSpeed.seo?.score || 0;
