@@ -53,6 +53,35 @@ router.post('/', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/audit/list - Get all audits (paginated)
+router.get('/list', requireAuth, async (req, res, next) => {
+  try {
+    const { limit = 50, offset = 0 } = req.query;
+    
+    const audits = await databaseService.getAllAudits(parseInt(limit), parseInt(offset));
+    
+    res.json({
+      success: true,
+      audits: audits.map(audit => ({
+        id: audit.id,
+        siteUrl: audit.siteUrl,
+        siteType: audit.siteType,
+        createdAt: audit.createdAt,
+        hasResults: audit.results.length > 0
+      })),
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        total: audits.length
+      }
+    });
+    
+  } catch (error) {
+    logger.error('Error fetching audit list:', error);
+    next(error);
+  }
+});
+
 // GET /api/audit/:auditId - Get audit results by ID
 router.get('/:auditId', requireAuth, async (req, res, next) => {
   try {
@@ -197,35 +226,6 @@ router.get('/trends/:siteUrl', requireAuth, async (req, res, next) => {
     
   } catch (error) {
     logger.error('Error fetching audit trends:', error);
-    next(error);
-  }
-});
-
-// GET /api/audit/list - Get all audits (paginated)
-router.get('/list', requireAuth, async (req, res, next) => {
-  try {
-    const { limit = 50, offset = 0 } = req.query;
-    
-    const audits = await databaseService.getAllAudits(parseInt(limit), parseInt(offset));
-    
-    res.json({
-      success: true,
-      audits: audits.map(audit => ({
-        id: audit.id,
-        siteUrl: audit.siteUrl,
-        siteType: audit.siteType,
-        createdAt: audit.createdAt,
-        hasResults: audit.results.length > 0
-      })),
-      pagination: {
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        total: audits.length
-      }
-    });
-    
-  } catch (error) {
-    logger.error('Error fetching audit list:', error);
     next(error);
   }
 });
