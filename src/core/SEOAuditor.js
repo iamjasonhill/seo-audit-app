@@ -359,10 +359,10 @@ class SEOAuditor {
       queryParams.append('url', this.siteUrl);
       queryParams.append('strategy', 'mobile');
       queryParams.append('key', process.env.GOOGLE_API_KEY);
-      queryParams.append('category', 'PERFORMANCE');
-      queryParams.append('category', 'ACCESSIBILITY');
-      queryParams.append('category', 'BEST_PRACTICES');
-      queryParams.append('category', 'SEO');
+      queryParams.append('category', 'performance');
+      queryParams.append('category', 'accessibility');
+      queryParams.append('category', 'best-practices');
+      queryParams.append('category', 'seo');
 
       const fullUrl = `${apiUrl}?${queryParams.toString()}`;
 
@@ -370,7 +370,7 @@ class SEOAuditor {
         originalUrl: this.siteUrl,
         hasKey: !!process.env.GOOGLE_API_KEY,
         strategy: 'mobile',
-        categories: ['PERFORMANCE', 'ACCESSIBILITY', 'BEST_PRACTICES', 'SEO'],
+        categories: ['performance', 'accessibility', 'best-practices', 'seo'],
         fullUrl: fullUrl.replace(process.env.GOOGLE_API_KEY, 'HIDDEN_KEY')
       });
 
@@ -418,9 +418,8 @@ class SEOAuditor {
       if (data.analysisUTCTimestamp) {
         extra.analysisUTCTimestamp = data.analysisUTCTimestamp;
       }
-      if (params.strategy) {
-        extra.strategy = params.strategy;
-      }
+      // We always request with strategy=mobile above
+      extra.strategy = 'mobile';
 
       return this.formatPageSpeedResult(lighthouseResult, 'PageSpeed API', extra);
     } catch (error) {
