@@ -548,10 +548,17 @@ class SEOAuditor {
         xPoweredBy: headers['x-powered-by'] || null
       };
 
-      // Score uses 6 core headers (excluding legacy x-xss-protection)
-      const scoreKeys = ['strictTransportSecurity','xFrameOptions','xContentTypeOptions','contentSecurityPolicy','referrerPolicy'];
+      // Score uses the 6 headers we display in UI (exclude legacy x-xss-protection)
+      const scoreKeys = [
+        'strictTransportSecurity',
+        'xFrameOptions',
+        'xContentTypeOptions',
+        'contentSecurityPolicy',
+        'referrerPolicy',
+        'permissionsPolicy'
+      ];
       const securityScore = scoreKeys.reduce((acc, key) => acc + (securityHeaders[key] ? 1 : 0), 0);
-      const maxSecurityScore = scoreKeys.length + 1; // keep legacy total = 6 for UI compatibility
+      const maxSecurityScore = scoreKeys.length;
 
       // Build missing core headers list with brief guidance
       const headerGuidance = {
