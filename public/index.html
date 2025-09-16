@@ -611,15 +611,21 @@
                     this.form.parentNode.insertBefore(headerDiv, this.form.nextSibling);
                 }
                 
-                const auditDate = new Date(audit.createdAt).toLocaleDateString();
+                const auditDate = audit?.createdAt ? new Date(audit.createdAt) : null;
+                const auditDateTime = auditDate && !Number.isNaN(auditDate.getTime())
+                    ? auditDate.toLocaleString(undefined, {
+                        dateStyle: 'medium',
+                        timeStyle: 'short'
+                    })
+                    : 'Unknown';
                 headerDiv.innerHTML = `
                     <h3 style="margin: 0 0 0.5rem 0; color: #333;">
                         <i class="fas fa-chart-line"></i> Viewing Audit Results
                     </h3>
                     <p style="margin: 0; color: #666;">
-                        <strong>Site:</strong> ${audit.siteUrl} | 
-                        <strong>Type:</strong> ${audit.siteType} | 
-                        <strong>Date:</strong> ${auditDate}
+                        <strong>Site:</strong> ${audit.siteUrl} |
+                        <strong>Type:</strong> ${audit.siteType} |
+                        <strong>Date &amp; Time:</strong> ${auditDateTime}
                     </p>
                 `;
                 headerDiv.style.display = 'block';
