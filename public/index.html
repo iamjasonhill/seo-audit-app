@@ -644,34 +644,115 @@
 
                 let html = '<div class="feature-grid">';
                 
-                if (technical.pageSpeed) {
+                // Page Speed Analysis
+                if (technical.pageSpeed && !technical.pageSpeed.error) {
+                    const perfScore = technical.pageSpeed.performance;
+                    const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
+                    
                     html += `
                         <div class="metric-card">
-                            <h4>Page Speed Insights</h4>
-                            <p><strong>Performance:</strong> ${technical.pageSpeed.performance}/100</p>
+                            <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
+                            <div class="metric-value ${perfClass}">${perfScore}/100</div>
+                            <p><strong>Performance:</strong> ${perfScore}/100</p>
                             <p><strong>Accessibility:</strong> ${technical.pageSpeed.accessibility}/100</p>
                             <p><strong>Best Practices:</strong> ${technical.pageSpeed.bestPractices}/100</p>
                             <p><strong>SEO:</strong> ${technical.pageSpeed.seo}/100</p>
+                            ${technical.pageSpeed.coreWebVitals ? `
+                                <hr>
+                                <h5>Core Web Vitals</h5>
+                                <p><strong>LCP:</strong> ${technical.pageSpeed.largestContentfulPaint}</p>
+                                <p><strong>CLS:</strong> ${technical.pageSpeed.cumulativeLayoutShift}</p>
+                                <p><strong>FID:</strong> ${technical.pageSpeed.timeToInteractive}</p>
+                            ` : ''}
+                        </div>
+                    `;
+                } else if (technical.pageSpeed && technical.pageSpeed.error) {
+                    html += `
+                        <div class="metric-card">
+                            <h4><i class="fas fa-exclamation-triangle"></i> Page Speed Analysis</h4>
+                            <p class="status-error">Error: ${technical.pageSpeed.error}</p>
+                            <p>Lighthouse analysis failed. This may be due to site accessibility or configuration issues.</p>
                         </div>
                     `;
                 }
 
+                // HTTPS & Security Analysis
                 if (technical.https) {
+                    const securityScore = technical.https.securityScore || 0;
+                    const maxScore = technical.https.maxSecurityScore || 6;
+                    const securityClass = securityScore >= 5 ? 'status-good' : securityScore >= 3 ? 'status-warning' : 'status-error';
+                    
                     html += `
                         <div class="metric-card">
-                            <h4>HTTPS Status</h4>
-                            <p><strong>HTTPS:</strong> ${technical.https.isHTTPS ? 'Enabled' : 'Not Enabled'}</p>
+                            <h4><i class="fas fa-shield-alt"></i> Security Analysis</h4>
+                            <div class="metric-value ${securityClass}">${securityScore}/${maxScore}</div>
+                            <p><strong>HTTPS:</strong> ${technical.https.isHTTPS ? '✅ Enabled' : '❌ Not Enabled'}</p>
                             <p><strong>Status Code:</strong> ${technical.https.statusCode}</p>
+                            <p><strong>Security Headers:</strong> ${securityScore}/${maxScore}</p>
+                            ${technical.https.mixedContent && technical.https.mixedContent.hasMixedContent ? 
+                                '<p class="status-error"><strong>⚠️ Mixed Content:</strong> HTTP resources detected</p>' : 
+                                '<p class="status-good"><strong>✅ No Mixed Content</strong></p>'
+                            }
+                            <hr>
+                            <h5>Security Headers</h5>
+                            <ul>
+                                <li>HSTS: ${technical.https.securityHeaders?.strictTransportSecurity ? '✅' : '❌'}</li>
+                                <li>X-Frame-Options: ${technical.https.securityHeaders?.xFrameOptions ? '✅' : '❌'}</li>
+                                <li>X-Content-Type-Options: ${technical.https.securityHeaders?.xContentTypeOptions ? '✅' : '❌'}</li>
+                                <li>CSP: ${technical.https.securityHeaders?.contentSecurityPolicy ? '✅' : '❌'}</li>
+                            </ul>
                         </div>
                     `;
                 }
 
-                if (technical.mobileResponsive) {
+                // Mobile Responsiveness
+                if (technical.mobileResponsive && !technical.mobileResponsive.error) {
+                    const mobileScore = technical.mobileResponsive.overallScore || 0;
+                    const mobileClass = mobileScore >= 80 ? 'status-good' : mobileScore >= 60 ? 'status-warning' : 'status-error';
+                    
                     html += `
                         <div class="metric-card">
-                            <h4>Mobile Responsiveness</h4>
-                            <p><strong>Responsive:</strong> ${technical.mobileResponsive.isResponsive ? 'Yes' : 'No'}</p>
-                            <p><strong>Viewport Meta:</strong> ${technical.mobileResponsive.hasViewportMeta ? 'Present' : 'Missing'}</p>
+                            <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness</h4>
+                            <div class="metric-value ${mobileClass}">${mobileScore}/100</div>
+                            <p><strong>Mobile Friendly:</strong> ${technical.mobileResponsive.isMobileFriendly ? '✅ Yes' : '❌ No'}</p>
+                            <p><strong>Viewport Meta:</strong> ${technical.mobileResponsive.hasViewportMeta ? '✅ Present' : '❌ Missing'}</p>
+                            <p><strong>Touch Targets:</strong> ${technical.mobileResponsive.mobile?.touchTargets || 0}</p>
+                            <p><strong>Readable Text:</strong> ${technical.mobileResponsive.mobile?.readableTextElements || 0} elements</p>
+                            ${technical.mobileResponsive.mobile?.hasHorizontalScroll ? 
+                                '<p class="status-error"><strong>⚠️ Horizontal Scroll:</strong> Content overflows on mobile</p>' : 
+                                '<p class="status-good"><strong>✅ No Horizontal Scroll</strong></p>'
+                            }
+                            ${technical.mobileResponsive.recommendations && technical.mobileResponsive.recommendations.length > 0 ? `
+                                <hr>
+                                <h5>Recommendations</h5>
+                                <ul>
+                                    ${technical.mobileResponsive.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                                </ul>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+
+                // Schema Markup
+                if (technical.schemaMarkup && !technical.schemaMarkup.error) {
+                    const schemaScore = technical.schemaMarkup.totalStructuredData || 0;
+                    const schemaClass = schemaScore >= 3 ? 'status-good' : schemaScore >= 1 ? 'status-warning' : 'status-error';
+                    
+                    html += `
+                        <div class="metric-card">
+                            <h4><i class="fas fa-code"></i> Structured Data</h4>
+                            <div class="metric-value ${schemaClass}">${schemaScore}</div>
+                            <p><strong>Schema Types:</strong> ${technical.schemaMarkup.schemaTypes?.length || 0}</p>
+                            <p><strong>Open Graph:</strong> ${technical.schemaMarkup.openGraphTags || 0} tags</p>
+                            <p><strong>Twitter Cards:</strong> ${technical.schemaMarkup.twitterTags || 0} tags</p>
+                            <p><strong>Microdata:</strong> ${technical.schemaMarkup.microdataElements?.length || 0} elements</p>
+                            ${technical.schemaMarkup.recommendations && technical.schemaMarkup.recommendations.length > 0 ? `
+                                <hr>
+                                <h5>Recommendations</h5>
+                                <ul>
+                                    ${technical.schemaMarkup.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                                </ul>
+                            ` : ''}
                         </div>
                     `;
                 }

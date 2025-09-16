@@ -171,10 +171,12 @@ class SEOAuditor {
 
   async runPageSpeedInsights() {
     try {
-      const browser = await puppeteer.launch({ headless: true });
-      const page = await browser.newPage();
+      const browser = await puppeteer.launch({ 
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
       
-      // Run Lighthouse
+      // Run Lighthouse with proper configuration
       const lighthouseResult = await lighthouse(this.siteUrl, {
         port: new URL(browser.wsEndpoint()).port,
         output: 'json',
@@ -182,75 +184,209 @@ class SEOAuditor {
       }, {
         extends: 'lighthouse:default',
         settings: {
-          onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo']
+          onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
+          throttling: {
+            rttMs: 40,
+            throughputKbps: 10240,
+            cpuSlowdownMultiplier: 1,
+            requestLatencyMs: 0,
+            downloadThroughputKbps: 0,
+            uploadThroughputKbps: 0
+          }
         }
       });
 
       await browser.close();
 
+      if (!lighthouseResult || !lighthouseResult.lhr) {
+        throw new Error('Lighthouse failed to generate results');
+      }
+
       const lhr = lighthouseResult.lhr;
+      const audits = lhr.audits;
+      
       return {
-        performance: Math.round(lhr.categories.performance.score * 100),
-        accessibility: Math.round(lhr.categories.accessibility.score * 100),
-        bestPractices: Math.round(lhr.categories['best-practices'].score * 100),
-        seo: Math.round(lhr.categories.seo.score * 100),
-        firstContentfulPaint: lhr.audits['first-contentful-paint'].displayValue,
-        largestContentfulPaint: lhr.audits['largest-contentful-paint'].displayValue,
-        cumulativeLayoutShift: lhr.audits['cumulative-layout-shift'].displayValue
+        performance: Math.round((lhr.categories.performance?.score || 0) * 100),
+        accessibility: Math.round((lhr.categories.accessibility?.score || 0) * 100),
+        bestPractices: Math.round((lhr.categories['best-practices']?.score || 0) * 100),
+        seo: Math.round((lhr.categories.seo?.score || 0) * 100),
+        firstContentfulPaint: audits['first-contentful-paint']?.displayValue || 'N/A',
+        largestContentfulPaint: audits['largest-contentful-paint']?.displayValue || 'N/A',
+        cumulativeLayoutShift: audits['cumulative-layout-shift']?.displayValue || 'N/A',
+        speedIndex: audits['speed-index']?.displayValue || 'N/A',
+        totalBlockingTime: audits['total-blocking-time']?.displayValue || 'N/A',
+        timeToInteractive: audits['interactive']?.displayValue || 'N/A',
+        coreWebVitals: {
+          lcp: audits['largest-contentful-paint']?.numericValue || 0,
+          fid: audits['max-potential-fid']?.numericValue || 0,
+          cls: audits['cumulative-layout-shift']?.numericValue || 0
+        }
       };
     } catch (error) {
+      logger.error('Lighthouse error:', error);
       return {
-        error: error.message
+        error: error.message,
+        fallback: true
       };
     }
   }
 
   async checkHTTPS() {
     try {
-      const response = await axios.get(this.siteUrl, { timeout: 10000 });
+      const response = await axios.get(this.siteUrl, { 
+        timeout: 10000,
+        maxRedirects: 5,
+        validateStatus: () => true // Don't throw on any status code
+      });
+      
+      const headers = response.headers;
+      const isHTTPS = this.siteUrl.startsWith('https://');
+      const finalUrl = response.request.res.responseUrl || this.siteUrl;
+      const hasRedirect = finalUrl !== this.siteUrl;
+      
+      // Check security headers
+      const securityHeaders = {
+        strictTransportSecurity: !!headers['strict-transport-security'],
+        xFrameOptions: !!headers['x-frame-options'],
+        xContentTypeOptions: !!headers['x-content-type-options'],
+        xXSSProtection: !!headers['x-xss-protection'],
+        contentSecurityPolicy: !!headers['content-security-policy'],
+        referrerPolicy: !!headers['referrer-policy']
+      };
+      
+      const securityScore = Object.values(securityHeaders).filter(Boolean).length;
+      
       return {
-        isHTTPS: this.siteUrl.startsWith('https://'),
+        isHTTPS: isHTTPS,
         statusCode: response.status,
-        redirects: response.request.res.responseUrl !== this.siteUrl
+        redirects: hasRedirect,
+        finalUrl: finalUrl,
+        securityHeaders: securityHeaders,
+        securityScore: securityScore,
+        maxSecurityScore: Object.keys(securityHeaders).length,
+        hasValidSSL: isHTTPS && response.status < 400,
+        mixedContent: this.checkMixedContent(response.data)
       };
     } catch (error) {
+      return {
+        error: error.message,
+        isHTTPS: this.siteUrl.startsWith('https://'),
+        hasValidSSL: false
+      };
+    }
+  }
+
+  checkMixedContent(html) {
+    // Simple check for mixed content issues
+    const httpResources = html.match(/http:\/\/[^"'\s]+/g) || [];
+    return {
+      hasMixedContent: httpResources.length > 0,
+      httpResources: httpResources.slice(0, 5) // First 5 for preview
+    };
+  }
+
+  async checkMobileResponsiveness() {
+    try {
+      const browser = await puppeteer.launch({ 
+        headless: 'new',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      });
+      const page = await browser.newPage();
+      
+      // Test multiple viewport sizes
+      const viewports = [
+        { width: 375, height: 667, name: 'Mobile' },
+        { width: 768, height: 1024, name: 'Tablet' },
+        { width: 1920, height: 1080, name: 'Desktop' }
+      ];
+      
+      const results = {};
+      
+      for (const viewport of viewports) {
+        await page.setViewport(viewport);
+        await page.goto(this.siteUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+        
+        // Check for viewport meta tag
+        const viewportMeta = await page.$eval('meta[name="viewport"]', el => el.content).catch(() => null);
+        
+        // Check responsive behavior
+        const bodyWidth = await page.$eval('body', el => el.scrollWidth).catch(() => 0);
+        const bodyHeight = await page.$eval('body', el => el.scrollHeight).catch(() => 0);
+        const hasHorizontalScroll = bodyWidth > viewport.width;
+        const hasVerticalScroll = bodyHeight > viewport.height;
+        
+        // Check for mobile-specific elements
+        const touchTargets = await page.$$eval('button, a, input, select, textarea', elements => 
+          elements.filter(el => {
+            const rect = el.getBoundingClientRect();
+            return rect.width >= 44 && rect.height >= 44;
+          }).length
+        ).catch(() => 0);
+        
+        // Check text readability
+        const textElements = await page.$$eval('p, h1, h2, h3, h4, h5, h6, span, div', elements => 
+          elements.filter(el => {
+            const style = window.getComputedStyle(el);
+            const fontSize = parseFloat(style.fontSize);
+            return fontSize >= 16; // Minimum readable font size
+          }).length
+        ).catch(() => 0);
+        
+        results[viewport.name.toLowerCase()] = {
+          viewport: viewport,
+          hasViewportMeta: !!viewportMeta,
+          viewportContent: viewportMeta,
+          bodyWidth: bodyWidth,
+          bodyHeight: bodyHeight,
+          hasHorizontalScroll: hasHorizontalScroll,
+          hasVerticalScroll: hasVerticalScroll,
+          touchTargets: touchTargets,
+          readableTextElements: textElements,
+          isResponsive: !hasHorizontalScroll && bodyWidth <= viewport.width * 1.05
+        };
+      }
+      
+      await browser.close();
+      
+      // Overall mobile score
+      const mobileScore = results.mobile.isResponsive ? 100 : 
+                         results.mobile.hasHorizontalScroll ? 30 : 60;
+      
+      return {
+        ...results,
+        overallScore: mobileScore,
+        hasViewportMeta: results.mobile.hasViewportMeta,
+        isMobileFriendly: mobileScore >= 70,
+        recommendations: this.generateMobileRecommendations(results)
+      };
+    } catch (error) {
+      logger.error('Mobile responsiveness check error:', error);
       return {
         error: error.message
       };
     }
   }
 
-  async checkMobileResponsiveness() {
-    try {
-      const browser = await puppeteer.launch({ headless: true });
-      const page = await browser.newPage();
-      
-      // Set mobile viewport
-      await page.setViewport({ width: 375, height: 667 });
-      await page.goto(this.siteUrl, { waitUntil: 'networkidle2' });
-      
-      // Check for viewport meta tag
-      const viewportMeta = await page.$eval('meta[name="viewport"]', el => el.content).catch(() => null);
-      
-      // Check if content is readable on mobile
-      const bodyWidth = await page.$eval('body', el => el.scrollWidth).catch(() => 0);
-      const viewportWidth = 375;
-      const isResponsive = bodyWidth <= viewportWidth * 1.1; // 10% tolerance
-      
-      await browser.close();
-      
-      return {
-        hasViewportMeta: !!viewportMeta,
-        viewportContent: viewportMeta,
-        isResponsive: isResponsive,
-        bodyWidth: bodyWidth,
-        viewportWidth: viewportWidth
-      };
-    } catch (error) {
-      return {
-        error: error.message
-      };
+  generateMobileRecommendations(results) {
+    const recommendations = [];
+    
+    if (!results.mobile.hasViewportMeta) {
+      recommendations.push('Add viewport meta tag for mobile optimization');
     }
+    
+    if (results.mobile.hasHorizontalScroll) {
+      recommendations.push('Fix horizontal scrolling on mobile devices');
+    }
+    
+    if (results.mobile.touchTargets < 5) {
+      recommendations.push('Ensure touch targets are at least 44px in size');
+    }
+    
+    if (results.mobile.readableTextElements < 10) {
+      recommendations.push('Increase font sizes for better mobile readability');
+    }
+    
+    return recommendations;
   }
 
   async checkDuplicateContent() {
@@ -288,27 +424,108 @@ class SEOAuditor {
       const $ = cheerio.load(response.data);
       
       const schemaTypes = [];
+      const schemaDetails = [];
+      const microdataElements = [];
+      
+      // Check JSON-LD structured data
       $('script[type="application/ld+json"]').each((i, el) => {
         try {
           const schema = JSON.parse($(el).html());
           if (schema['@type']) {
             schemaTypes.push(schema['@type']);
+            schemaDetails.push({
+              type: schema['@type'],
+              context: schema['@context'] || 'https://schema.org',
+              properties: Object.keys(schema).filter(key => !key.startsWith('@')),
+              isValid: this.validateSchemaStructure(schema)
+            });
           }
         } catch (e) {
           // Invalid JSON, skip
         }
       });
       
+      // Check microdata
+      $('[itemscope]').each((i, el) => {
+        const itemType = $(el).attr('itemtype');
+        if (itemType) {
+          microdataElements.push({
+            type: itemType,
+            properties: $(el).find('[itemprop]').map((i, prop) => $(prop).attr('itemprop')).get()
+          });
+        }
+      });
+      
+      // Check RDFa
+      const rdfaElements = $('[typeof]').length;
+      
+      // Check Open Graph
+      const openGraphTags = $('meta[property^="og:"]').length;
+      
+      // Check Twitter Cards
+      const twitterTags = $('meta[name^="twitter:"]').length;
+      
+      const totalStructuredData = schemaTypes.length + microdataElements.length + rdfaElements;
+      
       return {
-        hasSchema: schemaTypes.length > 0,
+        hasSchema: totalStructuredData > 0,
         schemaTypes: schemaTypes,
-        count: schemaTypes.length
+        schemaDetails: schemaDetails,
+        microdataElements: microdataElements,
+        rdfaElements: rdfaElements,
+        openGraphTags: openGraphTags,
+        twitterTags: twitterTags,
+        totalStructuredData: totalStructuredData,
+        recommendations: this.generateSchemaRecommendations(schemaTypes, microdataElements, openGraphTags, twitterTags)
       };
     } catch (error) {
       return {
         error: error.message
       };
     }
+  }
+
+  validateSchemaStructure(schema) {
+    // Basic validation for common schema types
+    const requiredFields = {
+      'Organization': ['name'],
+      'WebSite': ['name', 'url'],
+      'Article': ['headline', 'author'],
+      'Product': ['name', 'description'],
+      'LocalBusiness': ['name', 'address'],
+      'BreadcrumbList': ['itemListElement']
+    };
+    
+    const schemaType = schema['@type'];
+    const required = requiredFields[schemaType] || [];
+    
+    return required.every(field => schema[field]);
+  }
+
+  generateSchemaRecommendations(schemaTypes, microdataElements, openGraphTags, twitterTags) {
+    const recommendations = [];
+    
+    if (schemaTypes.length === 0 && microdataElements.length === 0) {
+      recommendations.push('Add structured data markup (JSON-LD or microdata)');
+    }
+    
+    if (openGraphTags === 0) {
+      recommendations.push('Add Open Graph meta tags for social media sharing');
+    }
+    
+    if (twitterTags === 0) {
+      recommendations.push('Add Twitter Card meta tags');
+    }
+    
+    if (!schemaTypes.includes('Organization') && !schemaTypes.includes('LocalBusiness')) {
+      recommendations.push('Add Organization or LocalBusiness schema markup');
+    }
+    
+    if (!schemaTypes.includes('WebSite')) {
+      recommendations.push('Add WebSite schema markup with search action');
+    }
+    
+    return recommendations;
   }
 
   findDuplicates(array) {
