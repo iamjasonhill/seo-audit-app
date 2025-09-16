@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Audit {
+  id        String   @id @default(cuid())
+  siteUrl   String   @map("site_url")
+  siteType  String   @map("site_type")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  results   AuditResult[]
+  history   AuditHistory[]
+
+  @@map("audits")
+}
+
+model AuditResult {
+  id          String   @id @default(cuid())
+  auditId     String   @map("audit_id")
+  resultsData Json     @map("results_data")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  audit       Audit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@map("audit_results")
+}
+
+model AuditHistory {
+  id          String   @id @default(cuid())
+  auditId     String   @map("audit_id")
+  metricName  String   @map("metric_name")
+  metricValue Float    @map("metric_value")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  audit       Audit    @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@map("audit_history")
+}
+
+model AuditComparison {
+  id            String   @id @default(cuid())
+  baseAuditId   String   @map("base_audit_id")
+  compareAuditId String  @map("compare_audit_id")
+  comparisonData Json    @map("comparison_data")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("audit_comparisons")
+}

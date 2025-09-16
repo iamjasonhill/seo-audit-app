@@ -2,6 +2,7 @@ const express = require('express');
 const Joi = require('joi');
 const SEOAuditor = require('../core/SEOAuditor');
 const logger = require('../utils/logger');
+const databaseService = require('../services/database');
 
 const router = express.Router();
 
@@ -27,19 +28,22 @@ router.post('/', async (req, res, next) => {
     
     logger.info(`Starting SEO audit for ${siteUrl} (${siteType})`);
     
+    // Create audit record in database
+    const audit = await databaseService.createAudit(siteUrl, siteType);
+    
     // Create and run SEO audit
     const auditor = new SEOAuditor(siteUrl, siteType);
     const results = await auditor.runFullAudit();
     
-    // Store audit results (in a real app, you'd save to database)
-    const auditId = generateAuditId();
-    req.auditResults = { auditId, results };
+    // Save audit results to database
+    await databaseService.saveAuditResults(audit.id, results);
     
     res.json({
       success: true,
-      auditId: auditId,
+      auditId: audit.id,
       message: 'SEO audit completed successfully',
-      results: results
+      results: results,
+      timestamp: audit.createdAt
     });
     
   } catch (error) {
@@ -53,11 +57,26 @@ router.get('/:auditId', async (req, res, next) => {
   try {
     const { auditId } = req.params;
     
-    // In a real app, you'd fetch from database
-    // For now, return a placeholder
+    const audit = await databaseService.getAudit(auditId);
+    if (!audit) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Audit not found'
+      });
+    }
+
+    const results = await databaseService.getAuditResults(auditId);
+    
     res.json({
-      error: 'Not Implemented',
-      message: 'Audit result storage not implemented yet. Results are only available immediately after audit completion.'
+      success: true,
+      audit: {
+        id: audit.id,
+        siteUrl: audit.siteUrl,
+        siteType: audit.siteType,
+        createdAt: audit.createdAt,
+        updatedAt: audit.updatedAt
+      },
+      results: results ? results.resultsData : null
     });
     
   } catch (error) {
@@ -129,6 +148,105 @@ router.get('/status/:auditId', async (req, res, next) => {
 });
 
 // Helper function to generate audit ID
+// GET /api/audit/history/:siteUrl - Get audit history for a site
+router.get('/history/:siteUrl', async (req, res, next) => {
+  try {
+    const { siteUrl } = req.params;
+    const { limit = 10 } = req.query;
+    
+    const history = await databaseService.getAuditHistory(siteUrl, parseInt(limit));
+    
+    res.json({
+      success: true,
+      siteUrl,
+      history: history.map(audit => ({
+        id: audit.id,
+        siteType: audit.siteType,
+        createdAt: audit.createdAt,
+        hasResults: audit.results.length > 0,
+        latestResults: audit.results[0]?.resultsData || null
+      }))
+    });
+    
+  } catch (error) {
+    logger.error('Error fetching audit history:', error);
+    next(error);
+  }
+});
+
+// GET /api/audit/trends/:siteUrl - Get audit trends for a site
+router.get('/trends/:siteUrl', async (req, res, next) => {
+  try {
+    const { siteUrl } = req.params;
+    const { metric = 'performance_score', days = 30 } = req.query;
+    
+    const trends = await databaseService.getAuditTrends(siteUrl, metric, parseInt(days));
+    
+    res.json({
+      success: true,
+      siteUrl,
+      metric,
+      days: parseInt(days),
+      trends: trends.map(trend => ({
+        date: trend.createdAt,
+        value: trend.metricValue,
+        auditId: trend.auditId
+      }))
+    });
+    
+  } catch (error) {
+    logger.error('Error fetching audit trends:', error);
+    next(error);
+  }
+});
+
+// GET /api/audit/list - Get all audits (paginated)
+router.get('/list', async (req, res, next) => {
+  try {
+    const { limit = 50, offset = 0 } = req.query;
+    
+    const audits = await databaseService.getAllAudits(parseInt(limit), parseInt(offset));
+    
+    res.json({
+      success: true,
+      audits: audits.map(audit => ({
+        id: audit.id,
+        siteUrl: audit.siteUrl,
+        siteType: audit.siteType,
+        createdAt: audit.createdAt,
+        hasResults: audit.results.length > 0
+      })),
+      pagination: {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        total: audits.length
+      }
+    });
+    
+  } catch (error) {
+    logger.error('Error fetching audit list:', error);
+    next(error);
+  }
+});
+
+// DELETE /api/audit/:auditId - Delete an audit
+router.delete('/:auditId', async (req, res, next) => {
+  try {
+    const { auditId } = req.params;
+    
+    await databaseService.deleteAudit(auditId);
+    
+    res.json({
+      success: true,
+      message: 'Audit deleted successfully'
+    });
+    
+  } catch (error) {
+    logger.error('Error deleting audit:', error);
+    next(error);
+  }
+});
+
 function generateAuditId() {
   return 'audit_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }

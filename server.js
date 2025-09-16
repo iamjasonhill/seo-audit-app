@@ -9,6 +9,7 @@ require('dotenv').config();
 const logger = require('./src/utils/logger');
 const rateLimiter = require('./src/middleware/rateLimiter');
 const errorHandler = require('./src/middleware/errorHandler');
+const databaseService = require('./src/services/database');
 
 // Import routes
 const auditRoutes = require('./src/routes/audit');
@@ -79,9 +80,31 @@ app.use('*', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   logger.info(`SEO Audit App running on port ${PORT}`);
   logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Initialize database connection
+  try {
+    await databaseService.connect();
+    logger.info('Database connection established');
+  } catch (error) {
+    logger.error('Failed to connect to database:', error);
+    // Don't exit the process, but log the error
+  }
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  logger.info('Received SIGINT, shutting down gracefully...');
+  await databaseService.disconnect();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  logger.info('Received SIGTERM, shutting down gracefully...');
+  await databaseService.disconnect();
+  process.exit(0);
 });
 
 module.exports = app;

@@ -11,6 +11,14 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Prisma
+prisma/migrations/
+
 # Logs
 logs/
 *.log
@@ -89,3 +97,5 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+/src/generated/prisma
