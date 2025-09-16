@@ -30,10 +30,13 @@ router.post('/login', async (req, res, next) => {
     // Attempt login
     const user = await login(username, password);
     
-    // Set session
-    req.session.userId = user.id;
-    req.session.username = user.username;
-    req.session.role = user.role;
+    // Set token as HTTP-only cookie
+    res.cookie('token', user.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: 'lax'
+    });
     
     logger.info(`User ${username} logged in successfully`);
     
@@ -59,9 +62,9 @@ router.post('/login', async (req, res, next) => {
 // POST /api/auth/logout - Logout endpoint
 router.post('/logout', (req, res, next) => {
   try {
-    const username = req.session?.username || 'unknown';
+    const username = req.user?.username || 'unknown';
     
-    logout(req);
+    logout(req, res);
     
     logger.info(`User ${username} logged out`);
     
@@ -82,25 +85,30 @@ router.post('/logout', (req, res, next) => {
 // GET /api/auth/status - Check authentication status
 router.get('/status', (req, res, next) => {
   try {
-    if (req.session && req.session.userId) {
-      res.json({
-        authenticated: true,
-        user: {
-          id: req.session.userId,
-          username: req.session.username,
-          role: req.session.role
-        }
-      });
-    } else {
-      res.json({
+    const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
+    
+    if (!token) {
+      return res.json({
         authenticated: false
       });
     }
+    
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'your-secret-key-change-in-production');
+    
+    res.json({
+      authenticated: true,
+      user: {
+        id: decoded.userId,
+        username: decoded.username,
+        role: decoded.role
+      }
+    });
+    
   } catch (error) {
     logger.error('Auth status check error:', error);
-    res.status(500).json({
-      error: 'Status Check Failed',
-      message: 'An error occurred checking authentication status'
+    res.json({
+      authenticated: false
     });
   }
 });

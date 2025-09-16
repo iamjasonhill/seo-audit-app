@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
 
 // Simple in-memory user store (in production, use a database)
@@ -13,27 +14,54 @@ const users = [
 
 // Middleware to check if user is authenticated
 const requireAuth = (req, res, next) => {
-  if (req.session && req.session.userId) {
-    const user = users.find(u => u.id === req.session.userId);
-    if (user) {
-      req.user = user;
-      return next();
+  const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
+  
+  if (!token) {
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Authentication required' });
+    } else {
+      return res.redirect('/login');
     }
   }
   
-  // If not authenticated, redirect to login or return 401
-  if (req.path.startsWith('/api/')) {
-    return res.status(401).json({ error: 'Authentication required' });
-  } else {
-    return res.redirect('/login');
+  try {
+    const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'your-secret-key-change-in-production');
+    const user = users.find(u => u.id === decoded.userId);
+    
+    if (!user) {
+      throw new Error('User not found');
+    }
+    
+    req.user = user;
+    next();
+  } catch (error) {
+    logger.error('JWT verification failed:', error.message);
+    
+    if (req.path.startsWith('/api/')) {
+      return res.status(401).json({ error: 'Invalid token' });
+    } else {
+      return res.redirect('/login');
+    }
   }
 };
 
 // Middleware to check if user is already authenticated (for login page)
 const redirectIfAuthenticated = (req, res, next) => {
-  if (req.session && req.session.userId) {
-    return res.redirect('/dashboard');
+  const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
+  
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'your-secret-key-change-in-production');
+      const user = users.find(u => u.id === decoded.userId);
+      
+      if (user) {
+        return res.redirect('/dashboard');
+      }
+    } catch (error) {
+      // Token is invalid, continue to login page
+    }
   }
+  
   next();
 };
 
@@ -50,10 +78,18 @@ const login = async (username, password) => {
       throw new Error('Invalid credentials');
     }
     
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user.id, username: user.username, role: user.role },
+      process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+      { expiresIn: '24h' }
+    );
+    
     return {
       id: user.id,
       username: user.username,
-      role: user.role
+      role: user.role,
+      token
     };
   } catch (error) {
     logger.error('Login error:', error);
@@ -62,14 +98,10 @@ const login = async (username, password) => {
 };
 
 // Logout function
-const logout = (req) => {
-  if (req.session) {
-    req.session.destroy((err) => {
-      if (err) {
-        logger.error('Logout error:', err);
-      }
-    });
-  }
+const logout = (req, res) => {
+  // Clear the token cookie
+  res.clearCookie('token');
+  return { success: true };
 };
 
 module.exports = {
@@ -79,3 +111,4 @@ module.exports = {
   logout,
   users
 };
+
