@@ -174,43 +174,74 @@ class SEOAuditor {
       // Configure Puppeteer for serverless environment
       const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
       
-      const browser = await puppeteer.launch({ 
-        args: isServerless ? chromium.args : [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--single-process',
-          '--disable-gpu'
-        ],
-        executablePath: isServerless ? await chromium.executablePath() : undefined,
-        headless: isServerless ? chromium.headless : 'new'
-      });
+      let browser;
+      try {
+        browser = await puppeteer.launch({ 
+          args: isServerless ? chromium.args : [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process',
+            '--disable-gpu'
+          ],
+          executablePath: isServerless ? await chromium.executablePath() : undefined,
+          headless: isServerless ? chromium.headless : 'new'
+        });
+      } catch (browserError) {
+        logger.error('Failed to launch browser:', browserError.message);
+        throw new Error(`Browser launch failed: ${browserError.message}`);
+      }
       
       // Import Lighthouse dynamically (ES Module)
       const lighthouse = await import('lighthouse');
       
-      // Run Lighthouse with proper configuration
-      const lighthouseResult = await lighthouse.default(this.siteUrl, {
-        port: new URL(browser.wsEndpoint()).port,
-        output: 'json',
-        logLevel: 'error'
-      }, {
-        extends: 'lighthouse:default',
-        settings: {
-          onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
-          throttling: {
-            rttMs: 40,
-            throughputKbps: 10240,
-            cpuSlowdownMultiplier: 1,
-            requestLatencyMs: 0,
-            downloadThroughputKbps: 0,
-            uploadThroughputKbps: 0
+      let lighthouseResult;
+      try {
+        // Try with minimal configuration first
+        lighthouseResult = await lighthouse.default(this.siteUrl, {
+          port: new URL(browser.wsEndpoint()).port,
+          output: 'json',
+          logLevel: 'silent' // Reduce logging to avoid localization issues
+        }, {
+          extends: 'lighthouse:default',
+          settings: {
+            onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
+            throttling: {
+              rttMs: 40,
+              throughputKbps: 10240,
+              cpuSlowdownMultiplier: 1
+            },
+            // Skip problematic audits in serverless
+            skipAudits: ['uses-http2', 'uses-long-cache-ttl'],
+            maxWaitForFcp: 15000,
+            maxWaitForLoad: 35000
           }
-        }
-      });
+        });
+      } catch (lighthouseError) {
+        logger.warn('Lighthouse failed with full config, trying minimal config:', lighthouseError.message);
+        
+        // Fallback to minimal configuration
+        lighthouseResult = await lighthouse.default(this.siteUrl, {
+          port: new URL(browser.wsEndpoint()).port,
+          output: 'json',
+          logLevel: 'silent'
+        }, {
+          extends: 'lighthouse:default',
+          settings: {
+            onlyCategories: ['performance'],
+            throttling: {
+              rttMs: 40,
+              throughputKbps: 10240,
+              cpuSlowdownMultiplier: 1
+            },
+            maxWaitForFcp: 10000,
+            maxWaitForLoad: 20000
+          }
+        });
+      }
 
       await browser.close();
 
@@ -239,9 +270,26 @@ class SEOAuditor {
         }
       };
     } catch (error) {
-      logger.error('Lighthouse error:', error);
+      logger.error('Lighthouse analysis failed:', error.message);
+      
+      // Return a fallback response with basic metrics
       return {
-        error: error.message,
+        performance: {
+          score: 0,
+          metrics: {
+            firstContentfulPaint: 'Analysis failed',
+            largestContentfulPaint: 'Analysis failed',
+            firstInputDelay: 'Analysis failed',
+            cumulativeLayoutShift: 'Analysis failed',
+            speedIndex: 'Analysis failed',
+            totalBlockingTime: 'Analysis failed',
+            timeToInteractive: 'Analysis failed'
+          }
+        },
+        accessibility: { score: 0 },
+        bestPractices: { score: 0 },
+        seo: { score: 0 },
+        error: `Lighthouse analysis failed: ${error.message}`,
         fallback: true
       };
     }
