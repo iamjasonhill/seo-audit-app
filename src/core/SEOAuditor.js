@@ -7,6 +7,9 @@ const { URL } = require('url');
 const logger = require('../utils/logger');
 const SiteTypeModules = require('../modules/SiteTypeModules');
 
+// Ensure environment variables are loaded
+require('dotenv').config();
+
 class SEOAuditor {
   constructor(siteUrl, siteType = 'Generic') {
     this.siteUrl = this.normalizeUrl(siteUrl);
