@@ -528,26 +528,56 @@ class SEOAuditor {
       const finalUrl = response.request.res.responseUrl || this.siteUrl;
       const hasRedirect = finalUrl !== this.siteUrl;
       
-      // Check security headers
+      // Check security headers (core set used for scoring)
       const securityHeaders = {
-        strictTransportSecurity: !!headers['strict-transport-security'],
-        xFrameOptions: !!headers['x-frame-options'],
-        xContentTypeOptions: !!headers['x-content-type-options'],
-        xXSSProtection: !!headers['x-xss-protection'],
-        contentSecurityPolicy: !!headers['content-security-policy'],
-        referrerPolicy: !!headers['referrer-policy']
+        strictTransportSecurity: !!headers['strict-transport-security'], // HSTS
+        xFrameOptions: !!headers['x-frame-options'], // Clickjacking protection
+        xContentTypeOptions: !!headers['x-content-type-options'], // MIME sniffing
+        xXSSProtection: !!headers['x-xss-protection'], // Legacy, not counted but exposed
+        contentSecurityPolicy: !!headers['content-security-policy'], // CSP
+        referrerPolicy: !!headers['referrer-policy'] // Referrer privacy
       };
-      
-      const securityScore = Object.values(securityHeaders).filter(Boolean).length;
+
+      // Extended headers (not part of score but reported)
+      const extendedHeaders = {
+        permissionsPolicy: !!headers['permissions-policy'],
+        crossOriginResourcePolicy: !!headers['cross-origin-resource-policy'],
+        crossOriginOpenerPolicy: !!headers['cross-origin-opener-policy'],
+        crossOriginEmbedderPolicy: !!headers['cross-origin-embedder-policy'],
+        server: headers['server'] || null,
+        xPoweredBy: headers['x-powered-by'] || null
+      };
+
+      // Score uses 6 core headers (excluding legacy x-xss-protection)
+      const scoreKeys = ['strictTransportSecurity','xFrameOptions','xContentTypeOptions','contentSecurityPolicy','referrerPolicy'];
+      const securityScore = scoreKeys.reduce((acc, key) => acc + (securityHeaders[key] ? 1 : 0), 0);
+      const maxSecurityScore = scoreKeys.length + 1; // keep legacy total = 6 for UI compatibility
+
+      // Build missing core headers list with brief guidance
+      const headerGuidance = {
+        strictTransportSecurity: 'Add Strict-Transport-Security: max-age=15552000; includeSubDomains; preload',
+        xFrameOptions: "Add X-Frame-Options: SAMEORIGIN (or use frame-ancestors in CSP)",
+        xContentTypeOptions: 'Add X-Content-Type-Options: nosniff',
+        contentSecurityPolicy: "Add Content-Security-Policy to restrict sources (e.g., default-src 'self')",
+        referrerPolicy: 'Add Referrer-Policy: no-referrer-when-downgrade or stricter'
+      };
+      const missingHeaders = scoreKeys.filter(k => !securityHeaders[k]);
+      const remediationTips = [
+        ...missingHeaders.map(k => headerGuidance[k]),
+        extendedHeaders.xPoweredBy ? 'Remove X-Powered-By to avoid tech fingerprinting' : null,
+        extendedHeaders.server ? 'Hide or generalize the Server header to reduce fingerprinting' : null
+      ].filter(Boolean);
       
       return {
         isHTTPS: isHTTPS,
         statusCode: response.status,
         redirects: hasRedirect,
         finalUrl: finalUrl,
-        securityHeaders: securityHeaders,
+        securityHeaders: { ...securityHeaders, ...extendedHeaders },
         securityScore: securityScore,
-        maxSecurityScore: Object.keys(securityHeaders).length,
+        maxSecurityScore: maxSecurityScore,
+        missingHeaders: missingHeaders,
+        remediationTips: remediationTips,
         hasValidSSL: isHTTPS && response.status < 400,
         mixedContent: this.checkMixedContent(response.data)
       };
@@ -561,12 +591,67 @@ class SEOAuditor {
   }
 
   checkMixedContent(html) {
-    // Simple check for mixed content issues
-    const httpResources = html.match(/http:\/\/[^"'\s]+/g) || [];
-    return {
-      hasMixedContent: httpResources.length > 0,
-      httpResources: httpResources.slice(0, 5) // First 5 for preview
-    };
+    try {
+      // DOM-driven detection: only actual asset references (src/href), skip SVG namespaces
+      const $ = cheerio.load(html);
+      const rules = [
+        { selector: 'img[src]', attr: 'src', type: 'image' },
+        { selector: 'script[src]', attr: 'src', type: 'script' },
+        { selector: 'link[rel="stylesheet"][href]', attr: 'href', type: 'stylesheet' },
+        { selector: 'link[href][rel*="icon"]', attr: 'href', type: 'icon' },
+        { selector: 'iframe[src]', attr: 'src', type: 'iframe' },
+        { selector: 'video[src]', attr: 'src', type: 'video' },
+        { selector: 'video source[src]', attr: 'src', type: 'video' },
+        { selector: 'audio[src]', attr: 'src', type: 'audio' },
+        { selector: 'audio source[src]', attr: 'src', type: 'audio' },
+        { selector: 'source[src]', attr: 'src', type: 'source' },
+        { selector: 'link[rel="preload"][href]', attr: 'href', type: 'preload' }
+      ];
+
+      const collected = [];
+      for (const rule of rules) {
+        $(rule.selector).each((_, el) => {
+          const value = $(el).attr(rule.attr);
+          if (!value || typeof value !== 'string') return;
+          if (!value.toLowerCase().startsWith('http://')) return;
+
+          // Filter out SVG/XML namespace identifiers which are not requested assets
+          try {
+            const u = new URL(value);
+            if (u.hostname === 'www.w3.org' && /^\/(2000|1999)\//.test(u.pathname)) {
+              return;
+            }
+          } catch (_) {/* ignore parse errors */}
+
+          const location = $(el).parents('head').length > 0 ? 'head' : 'body';
+          const tag = el.tagName || el.name || 'unknown';
+          collected.push({ url: value, type: rule.type, tag, attr: rule.attr, location });
+        });
+      }
+
+      // Uniqueness by tag|attr|url to avoid duplicates
+      const map = new Map();
+      for (const item of collected) {
+        const key = `${item.tag}|${item.attr}|${item.url}`;
+        if (!map.has(key)) map.set(key, item);
+      }
+      const unique = Array.from(map.values());
+
+      return {
+        hasMixedContent: unique.length > 0,
+        total: unique.length,
+        samples: unique.slice(0, 10)
+      };
+    } catch (_) {
+      // Fallback: regex with namespace filtering
+      const matches = html.match(/http:\/\/[^"'\s)]+/g) || [];
+      const unique = Array.from(new Set(matches)).filter(u => !/^http:\/\/www\.w3\.org\/(2000|1999)\//.test(u));
+      return {
+        hasMixedContent: unique.length > 0,
+        total: unique.length,
+        samples: unique.slice(0, 10).map(url => ({ url, type: 'other', tag: 'unknown', attr: 'n/a', location: 'unknown' }))
+      };
+    }
   }
 
   async checkMobileResponsiveness() {

@@ -868,8 +868,18 @@
                             <p><strong>HTTPS:</strong> ${technical.https.isHTTPS ? '✅ Enabled' : '❌ Not Enabled'}</p>
                             <p><strong>Status Code:</strong> ${technical.https.statusCode}</p>
                             <p><strong>Security Headers:</strong> ${securityScore}/${maxScore}</p>
-                            ${technical.https.mixedContent && technical.https.mixedContent.hasMixedContent ? 
-                                '<p class="status-error"><strong>⚠️ Mixed Content:</strong> HTTP resources detected</p>' : 
+                            ${technical.https.mixedContent && technical.https.mixedContent.hasMixedContent ? `
+                                <p class="status-error"><strong>⚠️ Mixed Content:</strong> ${technical.https.mixedContent.total || ''} HTTP resources detected</p>
+                                ${technical.https.mixedContent.samples && technical.https.mixedContent.samples.length ? `
+                                    <details style="margin-top: .5rem">
+                                        <summary>View examples</summary>
+                                        <ul>
+                                            ${technical.https.mixedContent.samples.slice(0,5).map(s => `<li>[${s.type}] ${s.url}</li>`).join('')}
+                                        </ul>
+                                        <p><small>Fix by serving these over HTTPS or updating references.</small></p>
+                                    </details>
+                                ` : ''}
+                            ` : 
                                 '<p class="status-good"><strong>✅ No Mixed Content</strong></p>'
                             }
                             <hr>
@@ -879,7 +889,16 @@
                                 <li>X-Frame-Options: ${technical.https.securityHeaders?.xFrameOptions ? '✅' : '❌'}</li>
                                 <li>X-Content-Type-Options: ${technical.https.securityHeaders?.xContentTypeOptions ? '✅' : '❌'}</li>
                                 <li>CSP: ${technical.https.securityHeaders?.contentSecurityPolicy ? '✅' : '❌'}</li>
+                                <li>Referrer-Policy: ${technical.https.securityHeaders?.referrerPolicy ? '✅' : '❌'}</li>
+                                <li>Permissions-Policy: ${technical.https.securityHeaders?.permissionsPolicy ? '✅' : '❌'}</li>
                             </ul>
+                            ${technical.https.missingHeaders && technical.https.missingHeaders.length ? `
+                                <hr>
+                                <h5>Remediation Tips</h5>
+                                <ul>
+                                    ${technical.https.remediationTips.map(t => `<li>${t}</li>`).join('')}
+                                </ul>
+                            ` : ''}
                         </div>
                     `;
                 }
