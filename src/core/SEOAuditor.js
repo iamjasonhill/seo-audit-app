@@ -354,24 +354,27 @@ class SEOAuditor {
       // Use Google's PageSpeed Insights API (no browser required)
       const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`;
       
-      // Build params object
-      const params = {
-        url: encodeURIComponent(this.siteUrl),
-        strategy: 'mobile',
-        key: process.env.GOOGLE_API_KEY,
-        category: ['PERFORMANCE', 'ACCESSIBILITY', 'BEST_PRACTICES', 'SEO']
-      };
+      // Build query string manually to ensure multiple category parameters are sent correctly
+      const queryParams = new URLSearchParams();
+      queryParams.append('url', this.siteUrl);
+      queryParams.append('strategy', 'mobile');
+      queryParams.append('key', process.env.GOOGLE_API_KEY);
+      queryParams.append('category', 'PERFORMANCE');
+      queryParams.append('category', 'ACCESSIBILITY');
+      queryParams.append('category', 'BEST_PRACTICES');
+      queryParams.append('category', 'SEO');
+
+      const fullUrl = `${apiUrl}?${queryParams.toString()}`;
 
       logger.info('Calling PageSpeed API with params:', { 
         originalUrl: this.siteUrl,
-        encodedUrl: params.url,
-        hasKey: !!params.key,
-        strategy: params.strategy,
-        category: params.category
+        hasKey: !!process.env.GOOGLE_API_KEY,
+        strategy: 'mobile',
+        categories: ['PERFORMANCE', 'ACCESSIBILITY', 'BEST_PRACTICES', 'SEO'],
+        fullUrl: fullUrl.replace(process.env.GOOGLE_API_KEY, 'HIDDEN_KEY')
       });
 
-      const response = await axios.get(apiUrl, { 
-        params,
+      const response = await axios.get(fullUrl, { 
         timeout: 30000,
         headers: {
           'User-Agent': 'SEO-Audit-App/1.0'
@@ -388,7 +391,8 @@ class SEOAuditor {
       logger.info('PageSpeed API raw response:', {
         hasLighthouseResult: !!data.lighthouseResult,
         categoriesKeys: data.lighthouseResult ? Object.keys(data.lighthouseResult.categories || {}) : [],
-        responseKeys: Object.keys(data)
+        responseKeys: Object.keys(data),
+        categoriesData: data.lighthouseResult ? data.lighthouseResult.categories : null
       });
 
       if (data.error) {
