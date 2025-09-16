@@ -777,8 +777,36 @@
                     return;
                 }
 
+                const extractScore = (entry) => {
+                    if (entry === null || entry === undefined) return 0;
+
+                    const normalize = (value) => {
+                        if (!Number.isFinite(value)) return 0;
+                        const scaledValue = value <= 1 && value >= 0 ? value * 100 : value;
+                        return Math.round(scaledValue);
+                    };
+
+                    if (typeof entry === 'number') {
+                        return normalize(entry);
+                    }
+
+                    if (typeof entry === 'object') {
+                        if (typeof entry.score === 'number') {
+                            return normalize(entry.score);
+                        }
+                        if (typeof entry.score === 'string') {
+                            const parsed = Number(entry.score);
+                            if (!Number.isNaN(parsed)) {
+                                return normalize(parsed);
+                            }
+                        }
+                    }
+
+                    return 0;
+                };
+
                 let html = '<div class="feature-grid">';
-                
+
                 // Page Speed Analysis
                 if (technical.pageSpeed) {
                     // Handle error/fallback response
@@ -800,13 +828,13 @@
                         `;
                     } else {
                         // Handle normal Lighthouse/API response
-                        const perfScore = technical.pageSpeed.performance?.score || technical.pageSpeed.performance;
-                        const accScore = technical.pageSpeed.accessibility?.score || 0;
-                        const bpScore = technical.pageSpeed.bestPractices?.score || 0;
-                        const seoScore = technical.pageSpeed.seo?.score || 0;
-                        
+                        const perfScore = extractScore(technical.pageSpeed.performance);
+                        const accScore = extractScore(technical.pageSpeed.accessibility);
+                        const bpScore = extractScore(technical.pageSpeed.bestPractices);
+                        const seoScore = extractScore(technical.pageSpeed.seo);
+
                         const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
-                        
+
                         html += `
                             <div class="metric-card">
                                 <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>

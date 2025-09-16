@@ -3,7 +3,7 @@ const cheerio = require('cheerio');
 const puppeteer = require('puppeteer');
 const chromium = require('@sparticuz/chromium');
 const robotsParser = require('robots-parser');
-const { URL } = require('url');
+const { URL, URLSearchParams } = require('url');
 const logger = require('../utils/logger');
 const SiteTypeModules = require('../modules/SiteTypeModules');
 
@@ -173,61 +173,62 @@ class SEOAuditor {
   }
 
   async runPageSpeedInsights() {
+    const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+    let apiErrorMessage = null;
+
     try {
-      // Try PageSpeed Insights API first (more reliable in serverless)
-      if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      const shouldAttemptApi = isServerless || !!process.env.GOOGLE_API_KEY;
+
+      if (shouldAttemptApi) {
         try {
-          logger.info('Using PageSpeed Insights API for serverless environment');
-          logger.info('Environment variables check:', {
-            NODE_ENV: process.env.NODE_ENV,
-            VERCEL: process.env.VERCEL,
+          logger.info('Attempting PageSpeed Insights API analysis', {
+            isServerless,
             hasGoogleKey: !!process.env.GOOGLE_API_KEY
           });
           return await this.runPageSpeedInsightsAPI();
         } catch (apiError) {
-          logger.warn('PageSpeed API failed, using fallback response:', apiError.message);
-          
-          // Determine the type of error for better user messaging
+          logger.warn('PageSpeed API failed, continuing with fallback:', apiError.message);
+
           let errorMessage = 'PageSpeed API temporarily unavailable';
-          if (apiError.message.includes('rate limit')) {
+          let statusMessage = 'API unavailable';
+          const normalizedMessage = apiError.message.toLowerCase();
+
+          if (normalizedMessage.includes('rate limit')) {
             errorMessage = 'PageSpeed API rate limit exceeded. Please try again in a few minutes.';
-          } else if (apiError.message.includes('API key')) {
+            statusMessage = 'Rate limited';
+          } else if (normalizedMessage.includes('api key')) {
             errorMessage = 'PageSpeed API key not configured. Contact administrator.';
-          } else if (apiError.message.includes('Network error')) {
+            statusMessage = 'API key error';
+          } else if (normalizedMessage.includes('network error')) {
             errorMessage = 'Network error connecting to PageSpeed API.';
+            statusMessage = 'Network error';
+          } else if (normalizedMessage.includes('access denied')) {
+            errorMessage = 'PageSpeed API access denied. Check API key permissions.';
+            statusMessage = 'Access denied';
+          } else if (normalizedMessage.includes('invalid request')) {
+            errorMessage = 'Invalid request to PageSpeed API. Check URL format.';
+            statusMessage = 'Invalid request';
           }
-          
-          // Return a fallback response instead of trying Lighthouse
-          return {
-            performance: {
-              score: 0,
-              metrics: {
-                firstContentfulPaint: 'Rate limited',
-                largestContentfulPaint: 'Rate limited',
-                firstInputDelay: 'Rate limited',
-                cumulativeLayoutShift: 'Rate limited',
-                speedIndex: 'Rate limited',
-                totalBlockingTime: 'Rate limited',
-                timeToInteractive: 'Rate limited'
-              }
-            },
-            accessibility: { score: 0 },
-            bestPractices: { score: 0 },
-            seo: { score: 0 },
-            error: errorMessage,
-            fallback: true,
-            source: 'Rate Limited'
-          };
+
+          if (isServerless) {
+            const sourceLabel = statusMessage === 'Rate limited' ? 'Rate Limited' : 'API Unavailable';
+            return this.createFallbackPageSpeedResult(
+              errorMessage,
+              statusMessage,
+              sourceLabel
+            );
+          }
+
+          apiErrorMessage = errorMessage;
         }
       }
 
-      // Configure Puppeteer for serverless environment
-      const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
-      
+      const isServerlessBrowser = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
       let browser;
+
       try {
-        browser = await puppeteer.launch({ 
-          args: isServerless ? chromium.args : [
+        browser = await puppeteer.launch({
+          args: isServerlessBrowser ? chromium.args : [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
@@ -237,130 +238,105 @@ class SEOAuditor {
             '--single-process',
             '--disable-gpu'
           ],
-          executablePath: isServerless ? await chromium.executablePath() : undefined,
-          headless: isServerless ? chromium.headless : 'new'
+          executablePath: isServerlessBrowser ? await chromium.executablePath() : undefined,
+          headless: isServerlessBrowser ? chromium.headless : 'new'
         });
       } catch (browserError) {
         logger.error('Failed to launch browser:', browserError.message);
         throw new Error(`Browser launch failed: ${browserError.message}`);
       }
-      
-      // Import Lighthouse dynamically (ES Module)
-      const lighthouse = await import('lighthouse');
-      
-      let lighthouseResult;
-      try {
-        // Create a minimal custom configuration without extending default
-        const minimalConfig = {
-          settings: {
-            onlyCategories: ['performance'],
-            throttling: {
-              rttMs: 40,
-              throughputKbps: 10240,
-              cpuSlowdownMultiplier: 1
-            },
-            maxWaitForFcp: 10000,
-            maxWaitForLoad: 20000,
-            // Skip audits that might cause issues
-            skipAudits: [
-              'uses-http2',
-              'uses-long-cache-ttl',
-              'uses-text-compression',
-              'unused-css-rules',
-              'unused-javascript',
-              'render-blocking-resources',
-              'unminified-css',
-              'unminified-javascript'
-            ]
-          }
-        };
 
-        lighthouseResult = await lighthouse.default(this.siteUrl, {
-          port: new URL(browser.wsEndpoint()).port,
-          output: 'json',
-          logLevel: 'silent'
-        }, minimalConfig);
-      } catch (lighthouseError) {
-        logger.warn('Lighthouse failed with custom config, trying basic approach:', lighthouseError.message);
-        
-        // Try with the most basic configuration possible
+      try {
+        const lighthouse = await import('lighthouse');
+        let lighthouseResult;
+
         try {
-          lighthouseResult = await lighthouse.default(this.siteUrl, {
-            port: new URL(browser.wsEndpoint()).port,
-            output: 'json',
-            logLevel: 'silent'
-          }, {
+          const minimalConfig = {
             settings: {
-              onlyCategories: ['performance'],
+              onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
               throttling: {
                 rttMs: 40,
                 throughputKbps: 10240,
                 cpuSlowdownMultiplier: 1
-              }
+              },
+              maxWaitForFcp: 10000,
+              maxWaitForLoad: 20000,
+              skipAudits: [
+                'uses-http2',
+                'uses-long-cache-ttl',
+                'uses-text-compression',
+                'unused-css-rules',
+                'unused-javascript',
+                'render-blocking-resources',
+                'unminified-css',
+                'unminified-javascript'
+              ]
             }
-          });
-        } catch (secondError) {
-          logger.error('Lighthouse completely failed:', secondError.message);
-          throw new Error(`Lighthouse analysis failed: ${secondError.message}`);
+          };
+
+          lighthouseResult = await lighthouse.default(this.siteUrl, {
+            port: new URL(browser.wsEndpoint()).port,
+            output: 'json',
+            logLevel: 'silent'
+          }, minimalConfig);
+        } catch (lighthouseError) {
+          logger.warn('Lighthouse failed with custom config, trying basic approach:', lighthouseError.message);
+
+          try {
+            lighthouseResult = await lighthouse.default(this.siteUrl, {
+              port: new URL(browser.wsEndpoint()).port,
+              output: 'json',
+              logLevel: 'silent'
+            }, {
+              settings: {
+                onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
+                throttling: {
+                  rttMs: 40,
+                  throughputKbps: 10240,
+                  cpuSlowdownMultiplier: 1
+                }
+              }
+            });
+          } catch (secondError) {
+            logger.error('Lighthouse completely failed:', secondError.message);
+            throw new Error(`Lighthouse analysis failed: ${secondError.message}`);
+          }
+        }
+
+        if (!lighthouseResult || !lighthouseResult.lhr) {
+          throw new Error('Lighthouse failed to generate results');
+        }
+
+        const sourceLabel = apiErrorMessage ? 'Lighthouse (API fallback)' : 'Lighthouse';
+        const extra = apiErrorMessage ? { warnings: [apiErrorMessage] } : {};
+
+        return this.formatPageSpeedResult(lighthouseResult.lhr, sourceLabel, extra);
+      } finally {
+        if (browser) {
+          try {
+            await browser.close();
+          } catch (closeError) {
+            logger.warn('Failed to close browser after Lighthouse run:', closeError.message);
+          }
         }
       }
-
-      await browser.close();
-
-      if (!lighthouseResult || !lighthouseResult.lhr) {
-        throw new Error('Lighthouse failed to generate results');
-      }
-
-      const lhr = lighthouseResult.lhr;
-      const audits = lhr.audits;
-      
-      return {
-        performance: Math.round((lhr.categories.performance?.score || 0) * 100),
-        accessibility: Math.round((lhr.categories.accessibility?.score || 0) * 100),
-        bestPractices: Math.round((lhr.categories['best-practices']?.score || 0) * 100),
-        seo: Math.round((lhr.categories.seo?.score || 0) * 100),
-        firstContentfulPaint: audits['first-contentful-paint']?.displayValue || 'N/A',
-        largestContentfulPaint: audits['largest-contentful-paint']?.displayValue || 'N/A',
-        cumulativeLayoutShift: audits['cumulative-layout-shift']?.displayValue || 'N/A',
-        speedIndex: audits['speed-index']?.displayValue || 'N/A',
-        totalBlockingTime: audits['total-blocking-time']?.displayValue || 'N/A',
-        timeToInteractive: audits['interactive']?.displayValue || 'N/A',
-        coreWebVitals: {
-          lcp: audits['largest-contentful-paint']?.numericValue || 0,
-          fid: audits['max-potential-fid']?.numericValue || 0,
-          cls: audits['cumulative-layout-shift']?.numericValue || 0
-        }
-      };
     } catch (error) {
       logger.error('Lighthouse analysis failed:', error.message);
-      
-      // Return a fallback response with basic metrics
-      return {
-        performance: {
-          score: 0,
-          metrics: {
-            firstContentfulPaint: 'Analysis failed',
-            largestContentfulPaint: 'Analysis failed',
-            firstInputDelay: 'Analysis failed',
-            cumulativeLayoutShift: 'Analysis failed',
-            speedIndex: 'Analysis failed',
-            totalBlockingTime: 'Analysis failed',
-            timeToInteractive: 'Analysis failed'
-          }
-        },
-        accessibility: { score: 0 },
-        bestPractices: { score: 0 },
-        seo: { score: 0 },
-        error: `Lighthouse analysis failed: ${error.message}`,
-        fallback: true
-      };
+
+      const extra = apiErrorMessage ? { warnings: [apiErrorMessage] } : {};
+      return this.createFallbackPageSpeedResult(
+        `Lighthouse analysis failed: ${error.message}`,
+        'Analysis failed',
+        'Lighthouse',
+        extra
+      );
     }
   }
 
   async runPageSpeedInsightsAPI() {
     try {
       // Debug: Log environment variables
-      logger.info('Environment check:', { 
+      logger.info('Environment check:', {
         hasGoogleKey: !!process.env.GOOGLE_API_KEY,
         keyLength: process.env.GOOGLE_API_KEY?.length || 0,
         keyPrefix: process.env.GOOGLE_API_KEY?.substring(0, 10) || 'none'
@@ -378,17 +354,21 @@ class SEOAuditor {
       // Use Google's PageSpeed Insights API (no browser required)
       const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`;
       
-      // Build params object
-      const params = {
+      const categories = ['PERFORMANCE', 'ACCESSIBILITY', 'BEST_PRACTICES', 'SEO'];
+      const strategy = 'mobile';
+      const params = new URLSearchParams();
+      params.append('url', this.siteUrl);
+      params.append('strategy', strategy);
+      params.append('key', process.env.GOOGLE_API_KEY);
+      categories.forEach(category => params.append('category', category));
+
+      logger.info('Calling PageSpeed API with params:', {
         url: this.siteUrl,
-        strategy: 'mobile',
-        key: process.env.GOOGLE_API_KEY
-      };
+        strategy,
+        categories
+      });
 
-      logger.info('Calling PageSpeed API with params:', { url: this.siteUrl, hasKey: !!params.key });
-
-      const response = await axios.get(apiUrl, { 
-        params,
+      const response = await axios.get(`${apiUrl}?${params.toString()}`, {
         timeout: 30000,
         headers: {
           'User-Agent': 'SEO-Audit-App/1.0'
@@ -406,46 +386,21 @@ class SEOAuditor {
       }
 
       const lighthouseResult = data.lighthouseResult;
-      
+
       if (!lighthouseResult) {
         throw new Error('No Lighthouse result from PageSpeed API');
       }
 
-      const categories = lighthouseResult.categories;
-      const audits = lighthouseResult.audits;
+      const extra = {};
+      if (data.analysisUTCTimestamp) {
+        extra.analysisUTCTimestamp = data.analysisUTCTimestamp;
+      }
+      extra.strategy = strategy;
 
-      return {
-        performance: {
-          score: Math.round((categories.performance?.score || 0) * 100),
-          metrics: {
-            firstContentfulPaint: audits['first-contentful-paint']?.displayValue || 'N/A',
-            largestContentfulPaint: audits['largest-contentful-paint']?.displayValue || 'N/A',
-            firstInputDelay: audits['max-potential-fid']?.displayValue || 'N/A',
-            cumulativeLayoutShift: audits['cumulative-layout-shift']?.displayValue || 'N/A',
-            speedIndex: audits['speed-index']?.displayValue || 'N/A',
-            totalBlockingTime: audits['total-blocking-time']?.displayValue || 'N/A',
-            timeToInteractive: audits['interactive']?.displayValue || 'N/A'
-          }
-        },
-        accessibility: { 
-          score: Math.round((categories.accessibility?.score || 0) * 100) 
-        },
-        bestPractices: { 
-          score: Math.round((categories['best-practices']?.score || 0) * 100) 
-        },
-        seo: { 
-          score: Math.round((categories.seo?.score || 0) * 100) 
-        },
-        coreWebVitals: {
-          lcp: audits['largest-contentful-paint']?.numericValue || 0,
-          fid: audits['max-potential-fid']?.numericValue || 0,
-          cls: audits['cumulative-layout-shift']?.numericValue || 0
-        },
-        source: 'PageSpeed API'
-      };
+      return this.formatPageSpeedResult(lighthouseResult, 'PageSpeed API', extra);
     } catch (error) {
       logger.error('PageSpeed API error:', error.message);
-      
+
       // Handle specific error types
       if (error.response) {
         const status = error.response.status;
@@ -466,9 +421,79 @@ class SEOAuditor {
     }
   }
 
+  formatPageSpeedResult(lighthouseResult, source = 'PageSpeed API', extra = {}) {
+    const categories = lighthouseResult.categories || {};
+    const audits = lighthouseResult.audits || {};
+
+    const metrics = {
+      firstContentfulPaint: audits['first-contentful-paint']?.displayValue || 'N/A',
+      largestContentfulPaint: audits['largest-contentful-paint']?.displayValue || 'N/A',
+      firstInputDelay: audits['max-potential-fid']?.displayValue || 'N/A',
+      cumulativeLayoutShift: audits['cumulative-layout-shift']?.displayValue || 'N/A',
+      speedIndex: audits['speed-index']?.displayValue || 'N/A',
+      totalBlockingTime: audits['total-blocking-time']?.displayValue || 'N/A',
+      timeToInteractive: audits['interactive']?.displayValue || 'N/A'
+    };
+
+    return {
+      performance: {
+        score: Math.round((categories.performance?.score || 0) * 100),
+        metrics
+      },
+      accessibility: {
+        score: Math.round((categories.accessibility?.score || 0) * 100)
+      },
+      bestPractices: {
+        score: Math.round((categories['best-practices']?.score || 0) * 100)
+      },
+      seo: {
+        score: Math.round((categories.seo?.score || 0) * 100)
+      },
+      coreWebVitals: {
+        lcp: audits['largest-contentful-paint']?.numericValue || 0,
+        fid: audits['max-potential-fid']?.numericValue || 0,
+        cls: audits['cumulative-layout-shift']?.numericValue || 0
+      },
+      source,
+      ...extra
+    };
+  }
+
+  createFallbackPageSpeedResult(errorMessage, statusMessage = 'Unavailable', source = 'Fallback', extra = {}) {
+    const status = statusMessage || 'Unavailable';
+
+    return {
+      performance: {
+        score: 0,
+        metrics: {
+          firstContentfulPaint: status,
+          largestContentfulPaint: status,
+          firstInputDelay: status,
+          cumulativeLayoutShift: status,
+          speedIndex: status,
+          totalBlockingTime: status,
+          timeToInteractive: status
+        }
+      },
+      accessibility: { score: 0 },
+      bestPractices: { score: 0 },
+      seo: { score: 0 },
+      coreWebVitals: {
+        lcp: 0,
+        fid: 0,
+        cls: 0
+      },
+      error: errorMessage,
+      fallback: true,
+      source,
+      statusMessage: status,
+      ...extra
+    };
+  }
+
   async checkHTTPS() {
     try {
-      const response = await axios.get(this.siteUrl, { 
+      const response = await axios.get(this.siteUrl, {
         timeout: 10000,
         maxRedirects: 5,
         validateStatus: () => true // Don't throw on any status code
@@ -1231,13 +1256,17 @@ class SEOAuditor {
 
   identifyIssues() {
     const issues = [];
-    
+
     // Technical issues
-    if (this.results.technical.pageSpeed?.performance < 50) {
+    const pageSpeedData = this.results.technical.pageSpeed;
+    const performanceScore = pageSpeedData?.performance?.score ??
+      (typeof pageSpeedData?.performance === 'number' ? pageSpeedData.performance : 0);
+
+    if (performanceScore < 50) {
       issues.push({
         category: 'Technical',
         issue: 'Poor Page Speed Performance',
-        description: `Page speed score is ${this.results.technical.pageSpeed.performance}/100`,
+        description: `Page speed score is ${performanceScore}/100`,
         priority: 'High',
         effort: 'Medium',
         impact: 'High'
