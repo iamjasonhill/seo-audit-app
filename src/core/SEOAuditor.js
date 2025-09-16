@@ -721,7 +721,7 @@ class SEOAuditor {
           }).length
         ).catch(() => 0);
         
-        results[viewport.name.toLowerCase()] = {
+        const baseMetrics = {
           viewport: viewport,
           hasViewportMeta: !!viewportMeta,
           viewportContent: viewportMeta,
@@ -732,6 +732,125 @@ class SEOAuditor {
           touchTargets: touchTargets,
           readableTextElements: textElements,
           isResponsive: !hasHorizontalScroll && bodyWidth <= viewport.width * 1.05
+        };
+
+        // Collect deeper diagnostics only for Mobile viewport
+        if (viewport.name === 'Mobile') {
+          const details = await page.evaluate(() => {
+            const cssPath = (el) => {
+              if (!el || !el.nodeType || el.nodeType !== 1) return '';
+              let path = '';
+              while (el && el.nodeType === 1 && path.length < 500) {
+                let selector = el.tagName.toLowerCase();
+                if (el.id) { selector += `#${el.id}`; path = selector + (path ? ' > ' + path : ''); break; }
+                const className = (el.className || '').toString().trim().split(/\s+/).filter(Boolean).slice(0,2).join('.');
+                if (className) selector += `.${className}`;
+                const parent = el.parentElement;
+                if (parent) {
+                  const siblings = Array.from(parent.children).filter(c => c.tagName === el.tagName);
+                  if (siblings.length > 1) {
+                    const index = siblings.indexOf(el) + 1;
+                    selector += `:nth-of-type(${index})`;
+                  }
+                }
+                path = selector + (path ? ' > ' + path : '');
+                el = parent;
+              }
+              return path;
+            };
+
+            const isVisible = (el) => {
+              const style = window.getComputedStyle(el);
+              if (!style || style.display === 'none' || style.visibility === 'hidden') return false;
+              const rect = el.getBoundingClientRect();
+              return rect.width > 0 && rect.height > 0;
+            };
+
+            const viewportWidth = window.innerWidth;
+            const overflowEls = [];
+            document.querySelectorAll('body *').forEach(el => {
+              try {
+                if (!isVisible(el)) return;
+                const rect = el.getBoundingClientRect();
+                const overflowX = rect.right > viewportWidth + 1 || (el.scrollWidth - el.clientWidth) > 1;
+                if (overflowX) {
+                  overflowEls.push({
+                    selector: cssPath(el),
+                    tag: el.tagName.toLowerCase(),
+                    rect: { left: Math.round(rect.left), right: Math.round(rect.right), width: Math.round(rect.width) },
+                    client: { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth }
+                  });
+                }
+              } catch (_) {}
+            });
+
+            // Small tap targets
+            const tapCandidates = document.querySelectorAll('a[href],button,input,select,textarea');
+            const smallTaps = [];
+            tapCandidates.forEach(el => {
+              try {
+                if (!isVisible(el)) return;
+                const r = el.getBoundingClientRect();
+                if (r.width < 44 || r.height < 44) {
+                  smallTaps.push({ selector: cssPath(el), tag: el.tagName.toLowerCase(), width: Math.round(r.width), height: Math.round(r.height), text: (el.innerText||'').trim().slice(0,80) });
+                }
+              } catch (_) {}
+            });
+
+            // Small text
+            const smallTexts = [];
+            document.querySelectorAll('body *').forEach(el => {
+              try {
+                if (!isVisible(el)) return;
+                const style = window.getComputedStyle(el);
+                const fs = parseFloat(style.fontSize || '0');
+                if (fs > 0 && fs < 16) {
+                  const text = (el.textContent || '').replace(/\s+/g,' ').trim();
+                  if (text.length >= 10) {
+                    smallTexts.push({ selector: cssPath(el), fontSize: fs, text: text.slice(0,120) });
+                  }
+                }
+              } catch (_) {}
+            });
+
+            // Viewport meta warnings
+            const meta = document.querySelector('meta[name="viewport"]');
+            const content = meta ? meta.getAttribute('content') || '' : '';
+            const warnings = [];
+            if (content && !/width\s*=\s*device-width/i.test(content)) warnings.push('Viewport width is not device-width');
+            if (/user-scalable\s*=\s*no/i.test(content)) warnings.push('User scaling disabled');
+
+            // De-duplicate and limit samples
+            const dedupe = (arr, keyFn) => {
+              const m = new Map();
+              arr.forEach(i => m.set(keyFn(i), i));
+              return Array.from(m.values());
+            };
+            const overflowUnique = dedupe(overflowEls, i => i.selector).slice(0, 10);
+            const tapsUnique = dedupe(smallTaps, i => i.selector).slice(0, 10);
+            const textsUnique = dedupe(smallTexts, i => i.selector).slice(0, 10);
+
+            return {
+              overflow: { count: overflowEls.length, samples: overflowUnique },
+              smallTapTargets: { count: smallTaps.length, samples: tapsUnique },
+              smallText: { count: smallTexts.length, samples: textsUnique },
+              viewportMeta: { content, warnings }
+            };
+          });
+
+          results.mobile = { ...(results.mobile || {}), details };
+          // Enrich recommendations
+          const recs = [];
+          if (details.overflow.count > 0) recs.push(`Fix horizontal overflow: ${details.overflow.count} overflowing element(s)`);
+          if (details.smallTapTargets.count > 0) recs.push(`Increase tap target sizes: ${details.smallTapTargets.count} element(s) below 44x44px`);
+          if (details.smallText.count > 0) recs.push(`Increase text size: ${details.smallText.count} element(s) below 16px`);
+          if (details.viewportMeta.warnings.length) recs.push(...details.viewportMeta.warnings);
+          results.mobile.recommendations = Array.from(new Set([...(results.mobile.recommendations || []), ...recs]));
+        }
+
+        results[viewport.name.toLowerCase()] = {
+          ...(results[viewport.name.toLowerCase()] || {}),
+          ...baseMetrics
         };
       }
       
