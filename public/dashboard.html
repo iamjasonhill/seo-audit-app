@@ -423,7 +423,7 @@
                             <tr>
                                 <th>Site URL</th>
                                 <th>Type</th>
-                                <th>Date</th>
+                                <th>Date &amp; Time</th>
                                 <th>Status</th>
                                 <th>Actions</th>
                             </tr>
@@ -433,7 +433,7 @@
                                 <tr>
                                     <td>${audit.siteUrl}</td>
                                     <td>${audit.siteType}</td>
-                                    <td>${new Date(audit.createdAt).toLocaleDateString()}</td>
+                                    <td>${new Date(audit.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</td>
                                     <td>
                                         <span class="status-badge ${audit.hasResults ? 'status-good' : 'status-warning'}">
                                             ${audit.hasResults ? 'Complete' : 'Pending'}
@@ -463,7 +463,9 @@
                     if (data.success) {
                         const audits = data.audits;
                         const totalAudits = audits.length;
-                        const lastAudit = audits.length > 0 ? new Date(audits[0].createdAt).toLocaleDateString() : 'None';
+                        const lastAudit = audits.length > 0
+                            ? new Date(audits[0].createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+                            : 'None';
                         
                         // Find most audited site
                         const siteCounts = {};
