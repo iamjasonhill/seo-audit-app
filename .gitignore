@@ -100,3 +100,6 @@ temp/
 
 /src/generated/prisma
 .vercel
+.env.backup
+.env.production
+.env.tmp
