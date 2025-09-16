@@ -1,12 +1,8 @@
 const winston = require('winston');
 const path = require('path');
 
-// Create logs directory if it doesn't exist
-const fs = require('fs');
-const logDir = 'logs';
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir);
-}
+// Check if we're in a serverless environment (Vercel, AWS Lambda, etc.)
+const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production';
 
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -16,25 +12,32 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   defaultMeta: { service: 'seo-audit-app' },
-  transports: [
-    new winston.transports.File({ 
-      filename: path.join(logDir, 'error.log'), 
-      level: 'error' 
-    }),
-    new winston.transports.File({ 
-      filename: path.join(logDir, 'combined.log') 
-    })
-  ]
+  transports: []
 });
 
-// If we're not in production, log to the console as well
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    )
+// Only add file transports if we're not in a serverless environment
+if (!isServerless) {
+  const fs = require('fs');
+  const logDir = 'logs';
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir);
+  }
+  
+  logger.add(new winston.transports.File({ 
+    filename: path.join(logDir, 'error.log'), 
+    level: 'error' 
+  }));
+  logger.add(new winston.transports.File({ 
+    filename: path.join(logDir, 'combined.log') 
   }));
 }
+
+// Always add console transport for serverless environments
+logger.add(new winston.transports.Console({
+  format: winston.format.combine(
+    winston.format.colorize(),
+    winston.format.simple()
+  )
+}));
 
 module.exports = logger;
