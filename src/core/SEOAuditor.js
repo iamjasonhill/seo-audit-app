@@ -356,16 +356,15 @@ class SEOAuditor {
       
       // Build params object
       const params = {
-        url: this.siteUrl,
+        url: encodeURIComponent(this.siteUrl),
         strategy: 'mobile',
-        key: process.env.GOOGLE_API_KEY,
-        category: 'performance,accessibility,best-practices,seo'
+        key: process.env.GOOGLE_API_KEY
       };
 
       logger.info('Calling PageSpeed API with params:', { 
-        url: this.siteUrl, 
+        originalUrl: this.siteUrl,
+        encodedUrl: params.url,
         hasKey: !!params.key,
-        category: params.category,
         strategy: params.strategy
       });
 
