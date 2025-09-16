@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>SEO Audit App - Comprehensive Website Analysis</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
@@ -645,9 +648,9 @@
                 let html = '<div class="feature-grid">';
                 
                 // Page Speed Analysis
-                if (technical.pageSpeed && !technical.pageSpeed.error) {
-                    // Handle fallback response
-                    if (technical.pageSpeed.fallback) {
+                if (technical.pageSpeed) {
+                    // Handle error/fallback response
+                    if (technical.pageSpeed.error || technical.pageSpeed.fallback) {
                         const isRateLimited = technical.pageSpeed.source === 'Rate Limited';
                         const statusClass = isRateLimited ? 'status-error' : 'status-warning';
                         const statusText = isRateLimited ? 'Rate Limited' : 'API Unavailable';
@@ -680,12 +683,16 @@
                                 <p><strong>Accessibility:</strong> ${accScore}/100</p>
                                 <p><strong>Best Practices:</strong> ${bpScore}/100</p>
                                 <p><strong>SEO:</strong> ${seoScore}/100</p>
-                                ${technical.pageSpeed.coreWebVitals ? `
+                                ${technical.pageSpeed.performance?.metrics ? `
                                     <hr>
                                     <h5>Core Web Vitals</h5>
-                                    <p><strong>LCP:</strong> ${technical.pageSpeed.largestContentfulPaint}</p>
-                                    <p><strong>CLS:</strong> ${technical.pageSpeed.cumulativeLayoutShift}</p>
-                                    <p><strong>FID:</strong> ${technical.pageSpeed.timeToInteractive}</p>
+                                    <p><strong>LCP:</strong> ${technical.pageSpeed.performance.metrics.largestContentfulPaint || 'N/A'}</p>
+                                    <p><strong>CLS:</strong> ${technical.pageSpeed.performance.metrics.cumulativeLayoutShift || 'N/A'}</p>
+                                    <p><strong>FID:</strong> ${technical.pageSpeed.performance.metrics.firstInputDelay || 'N/A'}</p>
+                                    <p><strong>FCP:</strong> ${technical.pageSpeed.performance.metrics.firstContentfulPaint || 'N/A'}</p>
+                                    <p><strong>SI:</strong> ${technical.pageSpeed.performance.metrics.speedIndex || 'N/A'}</p>
+                                    <p><strong>TBT:</strong> ${technical.pageSpeed.performance.metrics.totalBlockingTime || 'N/A'}</p>
+                                    <p><strong>TTI:</strong> ${technical.pageSpeed.performance.metrics.timeToInteractive || 'N/A'}</p>
                                 ` : ''}
                                 ${technical.pageSpeed.source ? `<p><small>Source: ${technical.pageSpeed.source}</small></p>` : ''}
                             </div>
