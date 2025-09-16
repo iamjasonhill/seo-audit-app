@@ -177,7 +177,28 @@ class SEOAuditor {
           logger.info('Using PageSpeed Insights API for serverless environment');
           return await this.runPageSpeedInsightsAPI();
         } catch (apiError) {
-          logger.warn('PageSpeed API failed, falling back to Lighthouse:', apiError.message);
+          logger.warn('PageSpeed API failed, using fallback response:', apiError.message);
+          // Return a fallback response instead of trying Lighthouse
+          return {
+            performance: {
+              score: 0,
+              metrics: {
+                firstContentfulPaint: 'API unavailable',
+                largestContentfulPaint: 'API unavailable',
+                firstInputDelay: 'API unavailable',
+                cumulativeLayoutShift: 'API unavailable',
+                speedIndex: 'API unavailable',
+                totalBlockingTime: 'API unavailable',
+                timeToInteractive: 'API unavailable'
+              }
+            },
+            accessibility: { score: 0 },
+            bestPractices: { score: 0 },
+            seo: { score: 0 },
+            error: `PageSpeed API failed: ${apiError.message}`,
+            fallback: true,
+            source: 'Fallback'
+          };
         }
       }
 
@@ -321,19 +342,38 @@ class SEOAuditor {
     try {
       // Use Google's PageSpeed Insights API (no browser required)
       const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`;
+      
+      // Build params object
       const params = {
         url: this.siteUrl,
-        key: process.env.GOOGLE_API_KEY || 'demo', // Use demo key if no API key
-        strategy: 'mobile',
-        category: ['performance', 'accessibility', 'best-practices', 'seo']
+        strategy: 'mobile'
       };
+
+      // Only add key if we have one (demo key doesn't work reliably)
+      if (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY !== 'demo') {
+        params.key = process.env.GOOGLE_API_KEY;
+      }
+
+      logger.info('Calling PageSpeed API with params:', { url: this.siteUrl, hasKey: !!params.key });
 
       const response = await axios.get(apiUrl, { 
         params,
-        timeout: 30000 
+        timeout: 30000,
+        headers: {
+          'User-Agent': 'SEO-Audit-App/1.0'
+        }
       });
 
       const data = response.data;
+      
+      if (!data) {
+        throw new Error('No data received from PageSpeed API');
+      }
+
+      if (data.error) {
+        throw new Error(`PageSpeed API error: ${data.error.message || 'Unknown error'}`);
+      }
+
       const lighthouseResult = data.lighthouseResult;
       
       if (!lighthouseResult) {

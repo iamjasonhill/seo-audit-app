@@ -646,31 +646,47 @@
                 
                 // Page Speed Analysis
                 if (technical.pageSpeed && !technical.pageSpeed.error) {
-                    // Handle Lighthouse response
-                    const perfScore = technical.pageSpeed.performance?.score || technical.pageSpeed.performance;
-                    const accScore = technical.pageSpeed.accessibility?.score || technical.pageSpeed.accessibility;
-                    const bpScore = technical.pageSpeed.bestPractices?.score || technical.pageSpeed.bestPractices;
-                    const seoScore = technical.pageSpeed.seo?.score || technical.pageSpeed.seo;
-                    
-                    const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
-                    
-                    html += `
-                        <div class="metric-card">
-                            <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
-                            <div class="metric-value ${perfClass}">${perfScore}/100</div>
-                            <p><strong>Performance:</strong> ${perfScore}/100</p>
-                            <p><strong>Accessibility:</strong> ${accScore}/100</p>
-                            <p><strong>Best Practices:</strong> ${bpScore}/100</p>
-                            <p><strong>SEO:</strong> ${seoScore}/100</p>
-                            ${technical.pageSpeed.coreWebVitals ? `
-                                <hr>
-                                <h5>Core Web Vitals</h5>
-                                <p><strong>LCP:</strong> ${technical.pageSpeed.largestContentfulPaint}</p>
-                                <p><strong>CLS:</strong> ${technical.pageSpeed.cumulativeLayoutShift}</p>
-                                <p><strong>FID:</strong> ${technical.pageSpeed.timeToInteractive}</p>
-                            ` : ''}
-                        </div>
-                    `;
+                    // Handle fallback response
+                    if (technical.pageSpeed.fallback) {
+                        html += `
+                            <div class="metric-card">
+                                <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
+                                <div class="metric-value status-warning">API Unavailable</div>
+                                <p><strong>Performance:</strong> API unavailable</p>
+                                <p><strong>Accessibility:</strong> API unavailable</p>
+                                <p><strong>Best Practices:</strong> API unavailable</p>
+                                <p><strong>SEO:</strong> API unavailable</p>
+                                <p><em>Page Speed analysis temporarily unavailable</em></p>
+                            </div>
+                        `;
+                    } else {
+                        // Handle normal Lighthouse/API response
+                        const perfScore = technical.pageSpeed.performance?.score || technical.pageSpeed.performance;
+                        const accScore = technical.pageSpeed.accessibility?.score || technical.pageSpeed.accessibility;
+                        const bpScore = technical.pageSpeed.bestPractices?.score || technical.pageSpeed.bestPractices;
+                        const seoScore = technical.pageSpeed.seo?.score || technical.pageSpeed.seo;
+                        
+                        const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
+                        
+                        html += `
+                            <div class="metric-card">
+                                <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
+                                <div class="metric-value ${perfClass}">${perfScore}/100</div>
+                                <p><strong>Performance:</strong> ${perfScore}/100</p>
+                                <p><strong>Accessibility:</strong> ${accScore}/100</p>
+                                <p><strong>Best Practices:</strong> ${bpScore}/100</p>
+                                <p><strong>SEO:</strong> ${seoScore}/100</p>
+                                ${technical.pageSpeed.coreWebVitals ? `
+                                    <hr>
+                                    <h5>Core Web Vitals</h5>
+                                    <p><strong>LCP:</strong> ${technical.pageSpeed.largestContentfulPaint}</p>
+                                    <p><strong>CLS:</strong> ${technical.pageSpeed.cumulativeLayoutShift}</p>
+                                    <p><strong>FID:</strong> ${technical.pageSpeed.timeToInteractive}</p>
+                                ` : ''}
+                                ${technical.pageSpeed.source ? `<p><small>Source: ${technical.pageSpeed.source}</small></p>` : ''}
+                            </div>
+                        `;
+                    }
                 } else if (technical.pageSpeed && technical.pageSpeed.error) {
                     html += `
                         <div class="metric-card">
