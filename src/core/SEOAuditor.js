@@ -358,14 +358,16 @@ class SEOAuditor {
       const params = {
         url: encodeURIComponent(this.siteUrl),
         strategy: 'mobile',
-        key: process.env.GOOGLE_API_KEY
+        key: process.env.GOOGLE_API_KEY,
+        category: ['PERFORMANCE', 'ACCESSIBILITY', 'BEST_PRACTICES', 'SEO']
       };
 
       logger.info('Calling PageSpeed API with params:', { 
         originalUrl: this.siteUrl,
         encodedUrl: params.url,
         hasKey: !!params.key,
-        strategy: params.strategy
+        strategy: params.strategy,
+        category: params.category
       });
 
       const response = await axios.get(apiUrl, { 
