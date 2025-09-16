@@ -171,6 +171,16 @@ class SEOAuditor {
 
   async runPageSpeedInsights() {
     try {
+      // Try PageSpeed Insights API first (more reliable in serverless)
+      if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+        try {
+          logger.info('Using PageSpeed Insights API for serverless environment');
+          return await this.runPageSpeedInsightsAPI();
+        } catch (apiError) {
+          logger.warn('PageSpeed API failed, falling back to Lighthouse:', apiError.message);
+        }
+      }
+
       // Configure Puppeteer for serverless environment
       const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
       
@@ -200,36 +210,8 @@ class SEOAuditor {
       
       let lighthouseResult;
       try {
-        // Try with minimal configuration first
-        lighthouseResult = await lighthouse.default(this.siteUrl, {
-          port: new URL(browser.wsEndpoint()).port,
-          output: 'json',
-          logLevel: 'silent' // Reduce logging to avoid localization issues
-        }, {
-          extends: 'lighthouse:default',
-          settings: {
-            onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
-            throttling: {
-              rttMs: 40,
-              throughputKbps: 10240,
-              cpuSlowdownMultiplier: 1
-            },
-            // Skip problematic audits in serverless
-            skipAudits: ['uses-http2', 'uses-long-cache-ttl'],
-            maxWaitForFcp: 15000,
-            maxWaitForLoad: 35000
-          }
-        });
-      } catch (lighthouseError) {
-        logger.warn('Lighthouse failed with full config, trying minimal config:', lighthouseError.message);
-        
-        // Fallback to minimal configuration
-        lighthouseResult = await lighthouse.default(this.siteUrl, {
-          port: new URL(browser.wsEndpoint()).port,
-          output: 'json',
-          logLevel: 'silent'
-        }, {
-          extends: 'lighthouse:default',
+        // Create a minimal custom configuration without extending default
+        const minimalConfig = {
           settings: {
             onlyCategories: ['performance'],
             throttling: {
@@ -238,9 +220,49 @@ class SEOAuditor {
               cpuSlowdownMultiplier: 1
             },
             maxWaitForFcp: 10000,
-            maxWaitForLoad: 20000
+            maxWaitForLoad: 20000,
+            // Skip audits that might cause issues
+            skipAudits: [
+              'uses-http2',
+              'uses-long-cache-ttl',
+              'uses-text-compression',
+              'unused-css-rules',
+              'unused-javascript',
+              'render-blocking-resources',
+              'unminified-css',
+              'unminified-javascript'
+            ]
           }
-        });
+        };
+
+        lighthouseResult = await lighthouse.default(this.siteUrl, {
+          port: new URL(browser.wsEndpoint()).port,
+          output: 'json',
+          logLevel: 'silent'
+        }, minimalConfig);
+      } catch (lighthouseError) {
+        logger.warn('Lighthouse failed with custom config, trying basic approach:', lighthouseError.message);
+        
+        // Try with the most basic configuration possible
+        try {
+          lighthouseResult = await lighthouse.default(this.siteUrl, {
+            port: new URL(browser.wsEndpoint()).port,
+            output: 'json',
+            logLevel: 'silent'
+          }, {
+            settings: {
+              onlyCategories: ['performance'],
+              throttling: {
+                rttMs: 40,
+                throughputKbps: 10240,
+                cpuSlowdownMultiplier: 1
+              }
+            }
+          });
+        } catch (secondError) {
+          logger.error('Lighthouse completely failed:', secondError.message);
+          throw new Error(`Lighthouse analysis failed: ${secondError.message}`);
+        }
       }
 
       await browser.close();
@@ -292,6 +314,67 @@ class SEOAuditor {
         error: `Lighthouse analysis failed: ${error.message}`,
         fallback: true
       };
+    }
+  }
+
+  async runPageSpeedInsightsAPI() {
+    try {
+      // Use Google's PageSpeed Insights API (no browser required)
+      const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`;
+      const params = {
+        url: this.siteUrl,
+        key: process.env.GOOGLE_API_KEY || 'demo', // Use demo key if no API key
+        strategy: 'mobile',
+        category: ['performance', 'accessibility', 'best-practices', 'seo']
+      };
+
+      const response = await axios.get(apiUrl, { 
+        params,
+        timeout: 30000 
+      });
+
+      const data = response.data;
+      const lighthouseResult = data.lighthouseResult;
+      
+      if (!lighthouseResult) {
+        throw new Error('No Lighthouse result from PageSpeed API');
+      }
+
+      const categories = lighthouseResult.categories;
+      const audits = lighthouseResult.audits;
+
+      return {
+        performance: {
+          score: Math.round((categories.performance?.score || 0) * 100),
+          metrics: {
+            firstContentfulPaint: audits['first-contentful-paint']?.displayValue || 'N/A',
+            largestContentfulPaint: audits['largest-contentful-paint']?.displayValue || 'N/A',
+            firstInputDelay: audits['max-potential-fid']?.displayValue || 'N/A',
+            cumulativeLayoutShift: audits['cumulative-layout-shift']?.displayValue || 'N/A',
+            speedIndex: audits['speed-index']?.displayValue || 'N/A',
+            totalBlockingTime: audits['total-blocking-time']?.displayValue || 'N/A',
+            timeToInteractive: audits['interactive']?.displayValue || 'N/A'
+          }
+        },
+        accessibility: { 
+          score: Math.round((categories.accessibility?.score || 0) * 100) 
+        },
+        bestPractices: { 
+          score: Math.round((categories['best-practices']?.score || 0) * 100) 
+        },
+        seo: { 
+          score: Math.round((categories.seo?.score || 0) * 100) 
+        },
+        coreWebVitals: {
+          lcp: audits['largest-contentful-paint']?.numericValue || 0,
+          fid: audits['max-potential-fid']?.numericValue || 0,
+          cls: audits['cumulative-layout-shift']?.numericValue || 0
+        },
+        source: 'PageSpeed API'
+      };
+    } catch (error) {
+      logger.error('PageSpeed API error:', error.message);
+      throw error;
     }
   }
 
