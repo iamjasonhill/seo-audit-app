@@ -314,6 +314,9 @@
                     <button type="submit" class="audit-btn" id="auditBtn">
                         <i class="fas fa-play"></i> Start Audit
                     </button>
+                    <button type="button" class="audit-btn" id="quickTestBtn" style="background:#28a745">
+                        <i class="fas fa-bolt"></i> Quick Test movingagain.com.au
+                    </button>
                 </form>
             </div>
 
@@ -343,6 +346,7 @@
             constructor() {
                 this.auditForm = document.getElementById('auditForm');
                 this.auditBtn = document.getElementById('auditBtn');
+                this.quickTestBtn = document.getElementById('quickTestBtn');
                 this.logoutBtn = document.getElementById('logoutBtn');
                 this.userInfo = document.getElementById('userInfo');
                 this.errorMessage = document.getElementById('errorMessage');
@@ -350,6 +354,7 @@
                 this.auditHistory = document.getElementById('auditHistory');
                 
                 this.auditForm.addEventListener('submit', this.handleAuditSubmit.bind(this));
+                this.quickTestBtn.addEventListener('click', this.handleQuickTest.bind(this));
                 this.logoutBtn.addEventListener('click', this.handleLogout.bind(this));
                 
                 this.init();
@@ -414,6 +419,38 @@
                 } finally {
                     this.auditBtn.disabled = false;
                     this.auditBtn.innerHTML = '<i class="fas fa-play"></i> Start Audit';
+                }
+            }
+
+            async handleQuickTest() {
+                const siteUrl = 'https://movingagain.com.au';
+                const siteType = 'Generic';
+                this.hideMessages();
+
+                const original = this.quickTestBtn.innerHTML;
+                this.quickTestBtn.disabled = true;
+                this.quickTestBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+
+                try {
+                    const response = await fetch('/api/audit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ siteUrl, siteType })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        this.showSuccess(`Quick test completed for ${siteUrl}`);
+                        await this.loadAuditHistory();
+                        await this.loadQuickStats();
+                    } else {
+                        this.showError(data.message || 'Quick test failed');
+                    }
+                } catch (err) {
+                    this.showError('Network error. Please try again.');
+                } finally {
+                    this.quickTestBtn.disabled = false;
+                    this.quickTestBtn.innerHTML = original;
                 }
             }
 

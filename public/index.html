@@ -750,7 +750,17 @@
                 const pageSpeed = typeof pageSpeedPerformance === 'number'
                     ? pageSpeedPerformance
                     : pageSpeedPerformance?.score ?? 0;
-                const mobileScore = data.technical?.mobileResponsive?.isResponsive ? 85 : 45;
+                // Prefer explicit overallScore; else derive a coarse score from PSI diagnostics
+                let mobileScore = 0;
+                if (data.technical?.mobileResponsive?.overallScore != null) {
+                    mobileScore = data.technical.mobileResponsive.overallScore;
+                } else if (data.technical?.pageSpeed?.mobileDiagnostics) {
+                    const md = data.technical.pageSpeed.mobileDiagnostics;
+                    const hasIssues = !!md.horizontalOverflow || (md.smallTapTargets?.count || 0) > 0 || (md.smallText?.count || 0) > 0;
+                    mobileScore = hasIssues ? 45 : 85;
+                } else {
+                    mobileScore = 0;
+                }
                 const seoScore = data.technical?.pageSpeed?.seo?.score || 0;
                 const issuesCount = data.roadmap?.issues?.length || 0;
 
@@ -903,7 +913,7 @@
                     `;
                 }
 
-                // Mobile Responsiveness
+                // Mobile Responsiveness (primary path)
                 if (technical.mobileResponsive && !technical.mobileResponsive.error) {
                     // Handle normal response
                     const mobileScore = technical.mobileResponsive.overallScore || 0;
@@ -927,6 +937,27 @@
                                 <ul>
                                     ${technical.mobileResponsive.recommendations.map(rec => `<li>${rec}</li>`).join('')}
                                 </ul>
+                            ` : ''}
+                        </div>
+                    `;
+                } else if (technical.pageSpeed && technical.pageSpeed.mobileDiagnostics) {
+                    // Fallback render using PSI diagnostics when Puppeteer path failed or older audits lack mobileResponsive
+                    const md = technical.pageSpeed.mobileDiagnostics;
+                    const fallbackScore = (md.fallbackScore != null) ? md.fallbackScore : ((md.smallTapTargets?.count||0) + (md.smallText?.count||0) + (md.horizontalOverflow?1:0) > 0 ? 45 : 85);
+                    const mobileClass = fallbackScore >= 80 ? 'status-good' : fallbackScore >= 60 ? 'status-warning' : 'status-error';
+                    html += `
+                        <div class="metric-card">
+                            <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness (PSI)</h4>
+                            <div class="metric-value ${mobileClass}">${fallbackScore}/100</div>
+                            <p><strong>Horizontal Overflow:</strong> ${md.horizontalOverflow ? '⚠️ Yes' : '✅ No'}</p>
+                            <p><strong>Small Tap Targets:</strong> ${md.smallTapTargets?.count || 0}</p>
+                            <p><strong>Small Text Blocks:</strong> ${md.smallText?.count || 0}</p>
+                            <p><strong>Viewport Meta:</strong> ${md.viewport?.hasMeta ? '✅ Present' : '❌ Missing'}${md.viewport?.warning ? ` — ${md.viewport.warning}` : ''}</p>
+                            ${md.overflowSamples && md.overflowSamples.length ? `
+                                <details style="margin-top:.5rem">
+                                    <summary>Overflow examples</summary>
+                                    <ul>${md.overflowSamples.slice(0,5).map(i => `<li>${(i.selector||i.snippet||'element')}</li>`).join('')}</ul>
+                                </details>
                             ` : ''}
                         </div>
                     `;
