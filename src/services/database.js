@@ -246,11 +246,22 @@ class DatabaseService {
 
   async deleteAudit(auditId) {
     try {
+      if (!process.env.DATABASE_URL) {
+        logger.warn('DATABASE_URL not configured - deleteAudit skipped in fallback mode');
+        return false;
+      }
+
       await this.prisma.audit.delete({
         where: { id: auditId },
       });
       logger.info(`Deleted audit ${auditId}`);
+      return true;
     } catch (error) {
+      if (error.code === 'P2025') {
+        const notFoundError = new Error('Audit not found');
+        notFoundError.status = 404;
+        throw notFoundError;
+      }
       logger.error('Error deleting audit:', error);
       throw error;
     }

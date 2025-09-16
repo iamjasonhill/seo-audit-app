@@ -235,15 +235,29 @@ router.delete('/:auditId', requireAuth, async (req, res, next) => {
   try {
     const { auditId } = req.params;
     
-    await databaseService.deleteAudit(auditId);
-    
+    const deleted = await databaseService.deleteAudit(auditId);
+
+    if (deleted === false) {
+      return res.status(503).json({
+        success: false,
+        message: 'Audit deletion is unavailable because the database is not configured.'
+      });
+    }
+
     res.json({
       success: true,
       message: 'Audit deleted successfully'
     });
-    
+
   } catch (error) {
     logger.error('Error deleting audit:', error);
+    if (error.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: 'Audit not found'
+      });
+    }
+
     next(error);
   }
 });
