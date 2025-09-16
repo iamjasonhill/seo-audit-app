@@ -579,8 +579,7 @@
                     if (data.success && data.results) {
                         console.log('Loaded audit results:', data);
                         this.showAuditHeader(data.audit);
-                        this.displayResults(data.results);
-                        this.showResults();
+                        this.showResults(data.results);
                     } else {
                         throw new Error('No results found');
                     }
