@@ -648,15 +648,19 @@
                 if (technical.pageSpeed && !technical.pageSpeed.error) {
                     // Handle fallback response
                     if (technical.pageSpeed.fallback) {
+                        const isRateLimited = technical.pageSpeed.source === 'Rate Limited';
+                        const statusClass = isRateLimited ? 'status-error' : 'status-warning';
+                        const statusText = isRateLimited ? 'Rate Limited' : 'API Unavailable';
+                        
                         html += `
                             <div class="metric-card">
                                 <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
-                                <div class="metric-value status-warning">API Unavailable</div>
-                                <p><strong>Performance:</strong> API unavailable</p>
-                                <p><strong>Accessibility:</strong> API unavailable</p>
-                                <p><strong>Best Practices:</strong> API unavailable</p>
-                                <p><strong>SEO:</strong> API unavailable</p>
-                                <p><em>Page Speed analysis temporarily unavailable</em></p>
+                                <div class="metric-value ${statusClass}">${statusText}</div>
+                                <p><strong>Performance:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
+                                <p><strong>Accessibility:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
+                                <p><strong>Best Practices:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
+                                <p><strong>SEO:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
+                                <p><em>${technical.pageSpeed.error || 'Page Speed analysis temporarily unavailable'}</em></p>
                             </div>
                         `;
                     } else {

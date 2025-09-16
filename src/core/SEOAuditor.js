@@ -178,26 +178,37 @@ class SEOAuditor {
           return await this.runPageSpeedInsightsAPI();
         } catch (apiError) {
           logger.warn('PageSpeed API failed, using fallback response:', apiError.message);
+          
+          // Determine the type of error for better user messaging
+          let errorMessage = 'PageSpeed API temporarily unavailable';
+          if (apiError.message.includes('rate limit')) {
+            errorMessage = 'PageSpeed API rate limit exceeded. Please try again in a few minutes.';
+          } else if (apiError.message.includes('API key')) {
+            errorMessage = 'PageSpeed API key not configured. Contact administrator.';
+          } else if (apiError.message.includes('Network error')) {
+            errorMessage = 'Network error connecting to PageSpeed API.';
+          }
+          
           // Return a fallback response instead of trying Lighthouse
           return {
             performance: {
               score: 0,
               metrics: {
-                firstContentfulPaint: 'API unavailable',
-                largestContentfulPaint: 'API unavailable',
-                firstInputDelay: 'API unavailable',
-                cumulativeLayoutShift: 'API unavailable',
-                speedIndex: 'API unavailable',
-                totalBlockingTime: 'API unavailable',
-                timeToInteractive: 'API unavailable'
+                firstContentfulPaint: 'Rate limited',
+                largestContentfulPaint: 'Rate limited',
+                firstInputDelay: 'Rate limited',
+                cumulativeLayoutShift: 'Rate limited',
+                speedIndex: 'Rate limited',
+                totalBlockingTime: 'Rate limited',
+                timeToInteractive: 'Rate limited'
               }
             },
             accessibility: { score: 0 },
             bestPractices: { score: 0 },
             seo: { score: 0 },
-            error: `PageSpeed API failed: ${apiError.message}`,
+            error: errorMessage,
             fallback: true,
-            source: 'Fallback'
+            source: 'Rate Limited'
           };
         }
       }
@@ -340,19 +351,20 @@ class SEOAuditor {
 
   async runPageSpeedInsightsAPI() {
     try {
+      // Check if we have a valid API key
+      if (!process.env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY === 'demo') {
+        throw new Error('No valid Google API key configured');
+      }
+
       // Use Google's PageSpeed Insights API (no browser required)
       const apiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed`;
       
       // Build params object
       const params = {
         url: this.siteUrl,
-        strategy: 'mobile'
+        strategy: 'mobile',
+        key: process.env.GOOGLE_API_KEY
       };
-
-      // Only add key if we have one (demo key doesn't work reliably)
-      if (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY !== 'demo') {
-        params.key = process.env.GOOGLE_API_KEY;
-      }
 
       logger.info('Calling PageSpeed API with params:', { url: this.siteUrl, hasKey: !!params.key });
 
@@ -414,7 +426,24 @@ class SEOAuditor {
       };
     } catch (error) {
       logger.error('PageSpeed API error:', error.message);
-      throw error;
+      
+      // Handle specific error types
+      if (error.response) {
+        const status = error.response.status;
+        if (status === 429) {
+          throw new Error('PageSpeed API rate limit exceeded. Please try again later.');
+        } else if (status === 403) {
+          throw new Error('PageSpeed API access denied. Check API key permissions.');
+        } else if (status === 400) {
+          throw new Error('Invalid request to PageSpeed API. Check URL format.');
+        } else {
+          throw new Error(`PageSpeed API error (${status}): ${error.response.data?.error?.message || 'Unknown error'}`);
+        }
+      } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+        throw new Error('Network error: Unable to reach PageSpeed API');
+      } else {
+        throw new Error(`PageSpeed API error: ${error.message}`);
+      }
     }
   }
 
