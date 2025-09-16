@@ -614,9 +614,9 @@
 
             updateOverview(data) {
                 // Update metrics
-                const pageSpeed = data.technical?.pageSpeed?.performance || 0;
+                const pageSpeed = data.technical?.pageSpeed?.performance?.score || data.technical?.pageSpeed?.performance || 0;
                 const mobileScore = data.technical?.mobileResponsive?.isResponsive ? 85 : 45;
-                const seoScore = data.technical?.pageSpeed?.seo || 0;
+                const seoScore = data.technical?.pageSpeed?.seo?.score || 0;
                 const issuesCount = data.roadmap?.issues?.length || 0;
 
                 document.getElementById('pageSpeed').textContent = pageSpeed;
@@ -669,9 +669,9 @@
                     } else {
                         // Handle normal Lighthouse/API response
                         const perfScore = technical.pageSpeed.performance?.score || technical.pageSpeed.performance;
-                        const accScore = technical.pageSpeed.accessibility?.score || technical.pageSpeed.accessibility;
-                        const bpScore = technical.pageSpeed.bestPractices?.score || technical.pageSpeed.bestPractices;
-                        const seoScore = technical.pageSpeed.seo?.score || technical.pageSpeed.seo;
+                        const accScore = technical.pageSpeed.accessibility?.score || 0;
+                        const bpScore = technical.pageSpeed.bestPractices?.score || 0;
+                        const seoScore = technical.pageSpeed.seo?.score || 0;
                         
                         const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
                         
