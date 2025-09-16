@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEO Audit App - Comprehensive Website Analysis</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .main-card {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .results h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .metric-card h3 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .issues-list {
+            list-style: none;
+        }
+
+        .issue-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #dc3545;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .issue-item.high {
+            border-left-color: #dc3545;
+        }
+
+        .issue-item.medium {
+            border-left-color: #ffc107;
+        }
+
+        .issue-item.low {
+            border-left-color: #28a745;
+        }
+
+        .issue-priority {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .priority-high {
+            background: #dc3545;
+            color: white;
+        }
+
+        .priority-medium {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .priority-low {
+            background: #28a745;
+            color: white;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid #e1e5e9;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            padding: 15px 25px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e1e5e9;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            transition: width 0.3s ease;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-good {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #dc3545;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #28a745;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .header h1 {
+                font-size: 2rem;
+            }
+
+            .main-card {
+                padding: 20px;
+            }
+
+            .tabs {
+                flex-wrap: wrap;
+            }
+
+            .tab {
+                flex: 1;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-search"></i> SEO Audit App</h1>
+            <p>Comprehensive website analysis for technical SEO, content optimization, and competitive insights</p>
+        </div>
+
+        <div class="main-card">
+            <form id="auditForm">
+                <div class="form-group">
+                    <label for="siteUrl">
+                        <i class="fas fa-globe"></i> Website URL
+                    </label>
+                    <input 
+                        type="url" 
+                        id="siteUrl" 
+                        name="siteUrl" 
+                        placeholder="https://example.com" 
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="siteType">
+                        <i class="fas fa-tag"></i> Site Type
+                    </label>
+                    <select id="siteType" name="siteType">
+                        <option value="Generic">Generic Website</option>
+                        <option value="SaaS">SaaS Application</option>
+                        <option value="Ecommerce">E-commerce Store</option>
+                        <option value="Agency">Marketing Agency</option>
+                        <option value="Local">Local Business</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="btn" id="auditBtn">
+                    <i class="fas fa-play"></i> Start SEO Audit
+                </button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing your website... This may take a few minutes.</p>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="results" id="results">
+                <h2><i class="fas fa-chart-line"></i> Audit Results</h2>
+                
+                <div class="tabs">
+                    <div class="tab active" data-tab="overview">Overview</div>
+                    <div class="tab" data-tab="technical">Technical</div>
+                    <div class="tab" data-tab="content">Content</div>
+                    <div class="tab" data-tab="structure">Structure</div>
+                    <div class="tab" data-tab="issues">Issues</div>
+                </div>
+
+                <div class="tab-content active" id="overview">
+                    <div class="feature-grid">
+                        <div class="metric-card">
+                            <h3><i class="fas fa-tachometer-alt"></i> Page Speed</h3>
+                            <div class="metric-value" id="pageSpeed">-</div>
+                            <div class="status-badge" id="pageSpeedStatus">-</div>
+                        </div>
+                        <div class="metric-card">
+                            <h3><i class="fas fa-mobile-alt"></i> Mobile Score</h3>
+                            <div class="metric-value" id="mobileScore">-</div>
+                            <div class="status-badge" id="mobileStatus">-</div>
+                        </div>
+                        <div class="metric-card">
+                            <h3><i class="fas fa-shield-alt"></i> SEO Score</h3>
+                            <div class="metric-value" id="seoScore">-</div>
+                            <div class="status-badge" id="seoStatus">-</div>
+                        </div>
+                        <div class="metric-card">
+                            <h3><i class="fas fa-exclamation-triangle"></i> Issues Found</h3>
+                            <div class="metric-value" id="issuesCount">-</div>
+                            <div class="status-badge" id="issuesStatus">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="technical">
+                    <div class="metric-card">
+                        <h3>Technical Health Analysis</h3>
+                        <div id="technicalDetails">Loading technical analysis...</div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="content">
+                    <div class="metric-card">
+                        <h3>Content Quality Analysis</h3>
+                        <div id="contentDetails">Loading content analysis...</div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="structure">
+                    <div class="metric-card">
+                        <h3>Site Structure Analysis</h3>
+                        <div id="structureDetails">Loading structure analysis...</div>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="issues">
+                    <div class="metric-card">
+                        <h3>Issues & Recommendations</h3>
+                        <ul class="issues-list" id="issuesList">
+                            <li>Loading issues...</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-cogs"></i>
+                </div>
+                <h3>Technical SEO</h3>
+                <p>Comprehensive analysis of page speed, mobile optimization, HTTPS, and technical health</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <h3>Content Analysis</h3>
+                <p>Evaluate content quality, keyword optimization, and content gaps</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-sitemap"></i>
+                </div>
+                <h3>Site Structure</h3>
+                <p>Analyze navigation, internal linking, and site architecture</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <h3>Competitive Insights</h3>
+                <p>Benchmark against competitors and identify opportunities</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class SEOAuditApp {
+            constructor() {
+                this.form = document.getElementById('auditForm');
+                this.loading = document.getElementById('loading');
+                this.results = document.getElementById('results');
+                this.auditBtn = document.getElementById('auditBtn');
+                this.progressFill = document.getElementById('progressFill');
+                
+                console.log('SEOAuditApp initialized', {
+                    form: !!this.form,
+                    loading: !!this.loading,
+                    results: !!this.results,
+                    auditBtn: !!this.auditBtn,
+                    progressFill: !!this.progressFill
+                });
+                
+                this.init();
+            }
+
+            init() {
+                if (!this.form) {
+                    console.error('Form not found!');
+                    return;
+                }
+                this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+                this.initTabs();
+                console.log('Event listeners attached');
+            }
+
+            initTabs() {
+                const tabs = document.querySelectorAll('.tab');
+                const tabContents = document.querySelectorAll('.tab-content');
+
+                tabs.forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        // Remove active class from all tabs and contents
+                        tabs.forEach(t => t.classList.remove('active'));
+                        tabContents.forEach(tc => tc.classList.remove('active'));
+
+                        // Add active class to clicked tab and corresponding content
+                        tab.classList.add('active');
+                        const tabId = tab.getAttribute('data-tab');
+                        document.getElementById(tabId).classList.add('active');
+                    });
+                });
+            }
+
+            async handleSubmit(e) {
+                e.preventDefault();
+                console.log('Form submitted!'); // Debug log
+                
+                const formData = new FormData(this.form);
+                const auditData = {
+                    siteUrl: formData.get('siteUrl'),
+                    siteType: formData.get('siteType')
+                };
+
+                console.log('Audit data:', auditData); // Debug log
+                this.showLoading();
+                this.simulateProgress();
+
+                try {
+                    const response = await fetch('/api/audit', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(auditData)
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        this.showResults(result.results);
+                        this.showMessage('SEO audit completed successfully!', 'success');
+                    } else {
+                        throw new Error(result.message || 'Audit failed');
+                    }
+                } catch (error) {
+                    this.showMessage(`Error: ${error.message}`, 'error');
+                } finally {
+                    this.hideLoading();
+                }
+            }
+
+            showLoading() {
+                this.loading.style.display = 'block';
+                this.results.style.display = 'none';
+                this.auditBtn.disabled = true;
+                this.auditBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            }
+
+            hideLoading() {
+                this.loading.style.display = 'none';
+                this.auditBtn.disabled = false;
+                this.auditBtn.innerHTML = '<i class="fas fa-play"></i> Start SEO Audit';
+            }
+
+            simulateProgress() {
+                let progress = 0;
+                const interval = setInterval(() => {
+                    progress += Math.random() * 15;
+                    if (progress > 90) progress = 90;
+                    this.progressFill.style.width = progress + '%';
+                    
+                    if (progress >= 90) {
+                        clearInterval(interval);
+                    }
+                }, 500);
+            }
+
+            showResults(data) {
+                this.results.style.display = 'block';
+                this.updateOverview(data);
+                this.updateTechnicalDetails(data.technical);
+                this.updateContentDetails(data.content);
+                this.updateStructureDetails(data.structure);
+                this.updateIssuesList(data.roadmap?.issues || []);
+            }
+
+            updateOverview(data) {
+                // Update metrics
+                const pageSpeed = data.technical?.pageSpeed?.performance || 0;
+                const mobileScore = data.technical?.mobileResponsive?.isResponsive ? 85 : 45;
+                const seoScore = data.technical?.pageSpeed?.seo || 0;
+                const issuesCount = data.roadmap?.issues?.length || 0;
+
+                document.getElementById('pageSpeed').textContent = pageSpeed;
+                document.getElementById('mobileScore').textContent = mobileScore;
+                document.getElementById('seoScore').textContent = seoScore;
+                document.getElementById('issuesCount').textContent = issuesCount;
+
+                // Update status badges
+                document.getElementById('pageSpeedStatus').textContent = this.getStatusText(pageSpeed);
+                document.getElementById('pageSpeedStatus').className = `status-badge ${this.getStatusClass(pageSpeed)}`;
+
+                document.getElementById('mobileStatus').textContent = this.getStatusText(mobileScore);
+                document.getElementById('mobileStatus').className = `status-badge ${this.getStatusClass(mobileScore)}`;
+
+                document.getElementById('seoStatus').textContent = this.getStatusText(seoScore);
+                document.getElementById('seoStatus').className = `status-badge ${this.getStatusClass(seoScore)}`;
+
+                document.getElementById('issuesStatus').textContent = issuesCount > 10 ? 'High' : issuesCount > 5 ? 'Medium' : 'Low';
+                document.getElementById('issuesStatus').className = `status-badge ${issuesCount > 10 ? 'status-error' : issuesCount > 5 ? 'status-warning' : 'status-good'}`;
+            }
+
+            updateTechnicalDetails(technical) {
+                const details = document.getElementById('technicalDetails');
+                if (!technical) {
+                    details.innerHTML = '<p>Technical analysis not available</p>';
+                    return;
+                }
+
+                let html = '<div class="feature-grid">';
+                
+                if (technical.pageSpeed) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Page Speed Insights</h4>
+                            <p><strong>Performance:</strong> ${technical.pageSpeed.performance}/100</p>
+                            <p><strong>Accessibility:</strong> ${technical.pageSpeed.accessibility}/100</p>
+                            <p><strong>Best Practices:</strong> ${technical.pageSpeed.bestPractices}/100</p>
+                            <p><strong>SEO:</strong> ${technical.pageSpeed.seo}/100</p>
+                        </div>
+                    `;
+                }
+
+                if (technical.https) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>HTTPS Status</h4>
+                            <p><strong>HTTPS:</strong> ${technical.https.isHTTPS ? 'Enabled' : 'Not Enabled'}</p>
+                            <p><strong>Status Code:</strong> ${technical.https.statusCode}</p>
+                        </div>
+                    `;
+                }
+
+                if (technical.mobileResponsive) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Mobile Responsiveness</h4>
+                            <p><strong>Responsive:</strong> ${technical.mobileResponsive.isResponsive ? 'Yes' : 'No'}</p>
+                            <p><strong>Viewport Meta:</strong> ${technical.mobileResponsive.hasViewportMeta ? 'Present' : 'Missing'}</p>
+                        </div>
+                    `;
+                }
+
+                html += '</div>';
+                details.innerHTML = html;
+            }
+
+            updateContentDetails(content) {
+                const details = document.getElementById('contentDetails');
+                if (!content) {
+                    details.innerHTML = '<p>Content analysis not available</p>';
+                    return;
+                }
+
+                let html = '<div class="feature-grid">';
+                
+                if (content.wordCount) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Content Length</h4>
+                            <p><strong>Word Count:</strong> ${content.wordCount.totalWords}</p>
+                            <p><strong>Substantial Content:</strong> ${content.wordCount.isSubstantial ? 'Yes' : 'No'}</p>
+                        </div>
+                    `;
+                }
+
+                if (content.readability) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Readability</h4>
+                            <p><strong>Score:</strong> ${content.readability.readabilityScore}</p>
+                            <p><strong>Level:</strong> ${content.readability.readabilityLevel}</p>
+                            <p><strong>Avg Words/Sentence:</strong> ${content.readability.avgWordsPerSentence}</p>
+                        </div>
+                    `;
+                }
+
+                html += '</div>';
+                details.innerHTML = html;
+            }
+
+            updateStructureDetails(structure) {
+                const details = document.getElementById('structureDetails');
+                if (!structure) {
+                    details.innerHTML = '<p>Structure analysis not available</p>';
+                    return;
+                }
+
+                let html = '<div class="feature-grid">';
+                
+                if (structure.navigation) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Navigation</h4>
+                            <p><strong>Navigation Links:</strong> ${structure.navigation.linkCount}</p>
+                            <p><strong>Has Main Navigation:</strong> ${structure.navigation.hasMainNavigation ? 'Yes' : 'No'}</p>
+                        </div>
+                    `;
+                }
+
+                if (structure.internalLinking) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Internal Linking</h4>
+                            <p><strong>Internal Links:</strong> ${structure.internalLinking.internalLinkCount}</p>
+                            <p><strong>External Links:</strong> ${structure.internalLinking.externalLinkCount}</p>
+                        </div>
+                    `;
+                }
+
+                html += '</div>';
+                details.innerHTML = html;
+            }
+
+            updateIssuesList(issues) {
+                const issuesList = document.getElementById('issuesList');
+                
+                if (!issues || issues.length === 0) {
+                    issuesList.innerHTML = '<li class="issue-item">No issues found! Your site is in great shape.</li>';
+                    return;
+                }
+
+                let html = '';
+                issues.forEach(issue => {
+                    html += `
+                        <li class="issue-item ${issue.priority.toLowerCase()}">
+                            <div class="issue-priority priority-${issue.priority.toLowerCase()}">${issue.priority}</div>
+                            <h4>${issue.issue}</h4>
+                            <p>${issue.description}</p>
+                            <small><strong>Effort:</strong> ${issue.effort} | <strong>Impact:</strong> ${issue.impact}</small>
+                        </li>
+                    `;
+                });
+
+                issuesList.innerHTML = html;
+            }
+
+            getStatusText(score) {
+                if (score >= 80) return 'Good';
+                if (score >= 60) return 'Fair';
+                return 'Poor';
+            }
+
+            getStatusClass(score) {
+                if (score >= 80) return 'status-good';
+                if (score >= 60) return 'status-warning';
+                return 'status-error';
+            }
+
+            showMessage(message, type) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `${type}-message`;
+                messageDiv.textContent = message;
+                
+                const container = document.querySelector('.main-card');
+                container.insertBefore(messageDiv, container.firstChild);
+                
+                setTimeout(() => {
+                    messageDiv.remove();
+                }, 5000);
+            }
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new SEOAuditApp();
+        });
+    </script>
+</body>
+</html>
