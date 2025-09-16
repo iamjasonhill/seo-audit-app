@@ -3,6 +3,7 @@ const Joi = require('joi');
 const SEOAuditor = require('../core/SEOAuditor');
 const logger = require('../utils/logger');
 const databaseService = require('../services/database');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -13,7 +14,7 @@ const auditSchema = Joi.object({
 });
 
 // POST /api/audit - Start a new SEO audit
-router.post('/', async (req, res, next) => {
+router.post('/', requireAuth, async (req, res, next) => {
   try {
     // Validate request body
     const { error, value } = auditSchema.validate(req.body);
@@ -53,7 +54,7 @@ router.post('/', async (req, res, next) => {
 });
 
 // GET /api/audit/:auditId - Get audit results by ID
-router.get('/:auditId', async (req, res, next) => {
+router.get('/:auditId', requireAuth, async (req, res, next) => {
   try {
     const { auditId } = req.params;
     
@@ -86,7 +87,7 @@ router.get('/:auditId', async (req, res, next) => {
 });
 
 // POST /api/audit/quick - Quick audit for specific checks
-router.post('/quick', async (req, res, next) => {
+router.post('/quick', requireAuth, async (req, res, next) => {
   try {
     const { error, value } = auditSchema.validate(req.body);
     if (error) {
@@ -130,7 +131,7 @@ router.post('/quick', async (req, res, next) => {
 });
 
 // GET /api/audit/status/:auditId - Check audit status
-router.get('/status/:auditId', async (req, res, next) => {
+router.get('/status/:auditId', requireAuth, async (req, res, next) => {
   try {
     const { auditId } = req.params;
     
@@ -149,7 +150,7 @@ router.get('/status/:auditId', async (req, res, next) => {
 
 // Helper function to generate audit ID
 // GET /api/audit/history/:siteUrl - Get audit history for a site
-router.get('/history/:siteUrl', async (req, res, next) => {
+router.get('/history/:siteUrl', requireAuth, async (req, res, next) => {
   try {
     const { siteUrl } = req.params;
     const { limit = 10 } = req.query;
@@ -175,7 +176,7 @@ router.get('/history/:siteUrl', async (req, res, next) => {
 });
 
 // GET /api/audit/trends/:siteUrl - Get audit trends for a site
-router.get('/trends/:siteUrl', async (req, res, next) => {
+router.get('/trends/:siteUrl', requireAuth, async (req, res, next) => {
   try {
     const { siteUrl } = req.params;
     const { metric = 'performance_score', days = 30 } = req.query;
@@ -201,7 +202,7 @@ router.get('/trends/:siteUrl', async (req, res, next) => {
 });
 
 // GET /api/audit/list - Get all audits (paginated)
-router.get('/list', async (req, res, next) => {
+router.get('/list', requireAuth, async (req, res, next) => {
   try {
     const { limit = 50, offset = 0 } = req.query;
     
@@ -230,7 +231,7 @@ router.get('/list', async (req, res, next) => {
 });
 
 // DELETE /api/audit/:auditId - Delete an audit
-router.delete('/:auditId', async (req, res, next) => {
+router.delete('/:auditId', requireAuth, async (req, res, next) => {
   try {
     const { auditId } = req.params;
     

@@ -509,9 +509,10 @@
                 });
                 
                 this.init();
+                this.checkAuthStatus();
             }
 
-            init() {
+            async init() {
                 if (!this.form) {
                     console.error('Form not found!');
                     return;
@@ -519,6 +520,20 @@
                 this.form.addEventListener('submit', (e) => this.handleSubmit(e));
                 this.initTabs();
                 console.log('Event listeners attached');
+            }
+
+            async checkAuthStatus() {
+                try {
+                    const response = await fetch('/api/auth/status');
+                    const data = await response.json();
+                    
+                    if (!data.authenticated) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                } catch (error) {
+                    window.location.href = '/login';
+                }
             }
 
             initTabs() {

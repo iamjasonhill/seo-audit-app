@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Dashboard - SEO Audit App</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .header {
+            background: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #667eea;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logout-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logout-btn:hover {
+            background: #c82333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .card h2 {
+            margin-bottom: 1rem;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .audit-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select {
+            padding: 0.75rem;
+            border: 2px solid #e1e5e9;
+            border-radius: 5px;
+            font-size: 1rem;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .audit-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 0.75rem;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .audit-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .audit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .audit-history {
+            grid-column: 1 / -1;
+        }
+
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .history-table th,
+        .history-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e1e5e9;
+        }
+
+        .history-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+
+        .history-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-good {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            padding: 0.75rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .success-message {
+            background: #efe;
+            color: #363;
+            padding: 0.75rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+            display: none;
+        }
+
+        .view-audit-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.8rem;
+        }
+
+        .view-audit-btn:hover {
+            background: #5a6fd8;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                padding: 1rem;
+            }
+            
+            .container {
+                padding: 0 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fas fa-chart-line"></i> SEO Audit Dashboard</h1>
+        <div class="user-info">
+            <span id="userInfo">Loading...</span>
+            <button class="logout-btn" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="error-message" id="errorMessage"></div>
+        <div class="success-message" id="successMessage"></div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <h2><i class="fas fa-search"></i> New Audit</h2>
+                <form id="auditForm" class="audit-form">
+                    <div class="form-group">
+                        <label for="siteUrl">Website URL</label>
+                        <input type="url" id="siteUrl" name="siteUrl" placeholder="https://example.com" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="siteType">Site Type</label>
+                        <select id="siteType" name="siteType">
+                            <option value="Generic">Generic</option>
+                            <option value="SaaS">SaaS</option>
+                            <option value="Ecommerce">Ecommerce</option>
+                            <option value="Agency">Agency</option>
+                            <option value="Local">Local</option>
+                        </select>
+                    </div>
+                    
+                    <button type="submit" class="audit-btn" id="auditBtn">
+                        <i class="fas fa-play"></i> Start Audit
+                    </button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2><i class="fas fa-info-circle"></i> Quick Stats</h2>
+                <div id="quickStats">
+                    <p><strong>Total Audits:</strong> <span id="totalAudits">-</span></p>
+                    <p><strong>Last Audit:</strong> <span id="lastAudit">-</span></p>
+                    <p><strong>Most Audited Site:</strong> <span id="mostAudited">-</span></p>
+                </div>
+            </div>
+
+            <div class="card audit-history">
+                <h2><i class="fas fa-history"></i> Audit History</h2>
+                <div id="auditHistory">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading audit history...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class DashboardApp {
+            constructor() {
+                this.auditForm = document.getElementById('auditForm');
+                this.auditBtn = document.getElementById('auditBtn');
+                this.logoutBtn = document.getElementById('logoutBtn');
+                this.userInfo = document.getElementById('userInfo');
+                this.errorMessage = document.getElementById('errorMessage');
+                this.successMessage = document.getElementById('successMessage');
+                this.auditHistory = document.getElementById('auditHistory');
+                
+                this.auditForm.addEventListener('submit', this.handleAuditSubmit.bind(this));
+                this.logoutBtn.addEventListener('click', this.handleLogout.bind(this));
+                
+                this.init();
+            }
+
+            async init() {
+                await this.checkAuthStatus();
+                await this.loadAuditHistory();
+                await this.loadQuickStats();
+            }
+
+            async checkAuthStatus() {
+                try {
+                    const response = await fetch('/api/auth/status');
+                    const data = await response.json();
+                    
+                    if (!data.authenticated) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    
+                    this.userInfo.textContent = `Welcome, ${data.user.username}`;
+                } catch (error) {
+                    window.location.href = '/login';
+                }
+            }
+
+            async handleAuditSubmit(e) {
+                e.preventDefault();
+                
+                const siteUrl = document.getElementById('siteUrl').value;
+                const siteType = document.getElementById('siteType').value;
+                
+                this.auditBtn.disabled = true;
+                this.auditBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running Audit...';
+                this.hideMessages();
+                
+                try {
+                    const response = await fetch('/api/audit', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ siteUrl, siteType })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.showSuccess(`Audit completed for ${siteUrl}`);
+                        this.loadAuditHistory();
+                        this.loadQuickStats();
+                        this.auditForm.reset();
+                    } else {
+                        this.showError(data.message || 'Audit failed');
+                    }
+                } catch (error) {
+                    this.showError('Network error. Please try again.');
+                } finally {
+                    this.auditBtn.disabled = false;
+                    this.auditBtn.innerHTML = '<i class="fas fa-play"></i> Start Audit';
+                }
+            }
+
+            async loadAuditHistory() {
+                try {
+                    const response = await fetch('/api/audit/list?limit=10', {
+                        credentials: 'include'
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        this.displayAuditHistory(data.audits);
+                    } else {
+                        this.auditHistory.innerHTML = '<p>Failed to load audit history</p>';
+                    }
+                } catch (error) {
+                    this.auditHistory.innerHTML = '<p>Error loading audit history</p>';
+                }
+            }
+
+            displayAuditHistory(audits) {
+                if (audits.length === 0) {
+                    this.auditHistory.innerHTML = '<p>No audits found. Run your first audit above!</p>';
+                    return;
+                }
+
+                const table = `
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Site URL</th>
+                                <th>Type</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${audits.map(audit => `
+                                <tr>
+                                    <td>${audit.siteUrl}</td>
+                                    <td>${audit.siteType}</td>
+                                    <td>${new Date(audit.createdAt).toLocaleDateString()}</td>
+                                    <td>
+                                        <span class="status-badge ${audit.hasResults ? 'status-good' : 'status-warning'}">
+                                            ${audit.hasResults ? 'Complete' : 'Pending'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="/?auditId=${audit.id}" class="view-audit-btn" target="_blank">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                this.auditHistory.innerHTML = table;
+            }
+
+            async loadQuickStats() {
+                try {
+                    const response = await fetch('/api/audit/list?limit=100', {
+                        credentials: 'include'
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        const audits = data.audits;
+                        const totalAudits = audits.length;
+                        const lastAudit = audits.length > 0 ? new Date(audits[0].createdAt).toLocaleDateString() : 'None';
+                        
+                        // Find most audited site
+                        const siteCounts = {};
+                        audits.forEach(audit => {
+                            siteCounts[audit.siteUrl] = (siteCounts[audit.siteUrl] || 0) + 1;
+                        });
+                        const mostAudited = Object.keys(siteCounts).reduce((a, b) => 
+                            siteCounts[a] > siteCounts[b] ? a : b, 'None'
+                        );
+                        
+                        document.getElementById('totalAudits').textContent = totalAudits;
+                        document.getElementById('lastAudit').textContent = lastAudit;
+                        document.getElementById('mostAudited').textContent = mostAudited;
+                    }
+                } catch (error) {
+                    console.error('Error loading quick stats:', error);
+                }
+            }
+
+            async handleLogout() {
+                try {
+                    const response = await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    
+                    if (response.ok) {
+                        window.location.href = '/login';
+                    }
+                } catch (error) {
+                    console.error('Logout error:', error);
+                }
+            }
+
+            showError(message) {
+                this.errorMessage.textContent = message;
+                this.errorMessage.style.display = 'block';
+            }
+
+            showSuccess(message) {
+                this.successMessage.textContent = message;
+                this.successMessage.style.display = 'block';
+            }
+
+            hideMessages() {
+                this.errorMessage.style.display = 'none';
+                this.successMessage.style.display = 'none';
+            }
+        }
+
+        // Initialize the app
+        new DashboardApp();
+    </script>
+</body>
+</html>
