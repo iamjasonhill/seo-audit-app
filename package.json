@@ -12,8 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "node prisma/seed.js",
-    "build": "prisma generate && npm run start",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "build": "prisma generate && npm run start"
   },
   "dependencies": {
     "@prisma/client": "^6.16.1",

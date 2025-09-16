@@ -170,6 +170,29 @@ class SEOAuditor {
 
   async runPageSpeedInsights() {
     try {
+      // Check if we're in a serverless environment
+      if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+        logger.warn('Puppeteer/Lighthouse not available in serverless environment, using fallback');
+        return {
+          performance: {
+            score: 0,
+            metrics: {
+              firstContentfulPaint: 'N/A (Serverless)',
+              largestContentfulPaint: 'N/A (Serverless)',
+              firstInputDelay: 'N/A (Serverless)',
+              cumulativeLayoutShift: 'N/A (Serverless)',
+              speedIndex: 'N/A (Serverless)',
+              totalBlockingTime: 'N/A (Serverless)',
+              timeToInteractive: 'N/A (Serverless)'
+            }
+          },
+          accessibility: { score: 0 },
+          bestPractices: { score: 0 },
+          seo: { score: 0 },
+          fallback: true
+        };
+      }
+
       const browser = await puppeteer.launch({ 
         headless: 'new',
         args: [
@@ -299,6 +322,20 @@ class SEOAuditor {
 
   async checkMobileResponsiveness() {
     try {
+      // Check if we're in a serverless environment
+      if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+        logger.warn('Puppeteer not available in serverless environment, using fallback for mobile responsiveness');
+        return {
+          isResponsive: 'N/A (Serverless)',
+          viewportMeta: 'N/A (Serverless)',
+          touchTargets: 'N/A (Serverless)',
+          textReadability: 'N/A (Serverless)',
+          horizontalScroll: 'N/A (Serverless)',
+          recommendations: ['Mobile responsiveness check not available in serverless environment'],
+          fallback: true
+        };
+      }
+
       const browser = await puppeteer.launch({ 
         headless: 'new',
         args: [
