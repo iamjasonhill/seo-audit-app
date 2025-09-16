@@ -87,6 +87,13 @@ router.get('/status', (req, res, next) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
     
+    logger.info('Auth status check:', {
+      hasAuthHeader: !!req.headers.authorization,
+      hasTokenCookie: !!req.cookies?.token,
+      tokenLength: token?.length || 0,
+      cookies: Object.keys(req.cookies || {})
+    });
+    
     if (!token) {
       return res.json({
         authenticated: false
