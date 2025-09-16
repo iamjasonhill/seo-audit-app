@@ -545,21 +545,33 @@
                 
                 if (auditId) {
                     console.log('Loading audit from URL:', auditId);
+                    console.log('Current URL:', window.location.href);
+                    console.log('Cookies:', document.cookie);
                     await this.loadExistingAudit(auditId);
                 }
             }
 
             async loadExistingAudit(auditId) {
+                let response;
                 try {
                     this.showLoading(true);
                     this.hideResults();
                     
-                    const response = await fetch(`/api/audit/${auditId}`, {
+                    response = await fetch(`/api/audit/${auditId}`, {
                         credentials: 'include'
                     });
                     
+                    if (response.status === 401 || response.status === 403) {
+                        // User not authenticated, redirect to login
+                        this.showError('Please log in to view audit results. Redirecting to login...');
+                        setTimeout(() => {
+                            window.location.href = '/login';
+                        }, 2000);
+                        return;
+                    }
+                    
                     if (!response.ok) {
-                        throw new Error('Failed to load audit');
+                        throw new Error(`Failed to load audit: ${response.status}`);
                     }
                     
                     const data = await response.json();
@@ -574,7 +586,17 @@
                     }
                 } catch (error) {
                     console.error('Error loading audit:', error);
-                    this.showError('Failed to load audit results. Please try again.');
+                    console.error('Response status:', response?.status);
+                    console.error('Response headers:', response?.headers);
+                    
+                    if (error.message.includes('401') || error.message.includes('403')) {
+                        this.showError('Please log in to view audit results. Redirecting to login...');
+                        setTimeout(() => {
+                            window.location.href = '/login';
+                        }, 2000);
+                    } else {
+                        this.showError(`Failed to load audit results: ${error.message}. Please try again.`);
+                    }
                 } finally {
                     this.showLoading(false);
                 }
