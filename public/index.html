@@ -646,46 +646,31 @@
                 
                 // Page Speed Analysis
                 if (technical.pageSpeed && !technical.pageSpeed.error) {
-                    // Handle fallback response (serverless environment)
-                    if (technical.pageSpeed.fallback) {
-                        html += `
-                            <div class="metric-card">
-                                <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
-                                <div class="metric-value status-warning">N/A (Serverless)</div>
-                                <p><strong>Performance:</strong> N/A (Serverless)</p>
-                                <p><strong>Accessibility:</strong> N/A (Serverless)</p>
-                                <p><strong>Best Practices:</strong> N/A (Serverless)</p>
-                                <p><strong>SEO:</strong> N/A (Serverless)</p>
-                                <p><em>Page Speed analysis not available in serverless environment</em></p>
-                            </div>
-                        `;
-                    } else {
-                        // Handle normal Lighthouse response
-                        const perfScore = technical.pageSpeed.performance?.score || technical.pageSpeed.performance;
-                        const accScore = technical.pageSpeed.accessibility?.score || technical.pageSpeed.accessibility;
-                        const bpScore = technical.pageSpeed.bestPractices?.score || technical.pageSpeed.bestPractices;
-                        const seoScore = technical.pageSpeed.seo?.score || technical.pageSpeed.seo;
-                        
-                        const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
-                        
-                        html += `
-                            <div class="metric-card">
-                                <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
-                                <div class="metric-value ${perfClass}">${perfScore}/100</div>
-                                <p><strong>Performance:</strong> ${perfScore}/100</p>
-                                <p><strong>Accessibility:</strong> ${accScore}/100</p>
-                                <p><strong>Best Practices:</strong> ${bpScore}/100</p>
-                                <p><strong>SEO:</strong> ${seoScore}/100</p>
-                                ${technical.pageSpeed.coreWebVitals ? `
-                                    <hr>
-                                    <h5>Core Web Vitals</h5>
-                                    <p><strong>LCP:</strong> ${technical.pageSpeed.largestContentfulPaint}</p>
-                                    <p><strong>CLS:</strong> ${technical.pageSpeed.cumulativeLayoutShift}</p>
-                                    <p><strong>FID:</strong> ${technical.pageSpeed.timeToInteractive}</p>
-                                ` : ''}
-                            </div>
-                        `;
-                    }
+                    // Handle Lighthouse response
+                    const perfScore = technical.pageSpeed.performance?.score || technical.pageSpeed.performance;
+                    const accScore = technical.pageSpeed.accessibility?.score || technical.pageSpeed.accessibility;
+                    const bpScore = technical.pageSpeed.bestPractices?.score || technical.pageSpeed.bestPractices;
+                    const seoScore = technical.pageSpeed.seo?.score || technical.pageSpeed.seo;
+                    
+                    const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
+                    
+                    html += `
+                        <div class="metric-card">
+                            <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
+                            <div class="metric-value ${perfClass}">${perfScore}/100</div>
+                            <p><strong>Performance:</strong> ${perfScore}/100</p>
+                            <p><strong>Accessibility:</strong> ${accScore}/100</p>
+                            <p><strong>Best Practices:</strong> ${bpScore}/100</p>
+                            <p><strong>SEO:</strong> ${seoScore}/100</p>
+                            ${technical.pageSpeed.coreWebVitals ? `
+                                <hr>
+                                <h5>Core Web Vitals</h5>
+                                <p><strong>LCP:</strong> ${technical.pageSpeed.largestContentfulPaint}</p>
+                                <p><strong>CLS:</strong> ${technical.pageSpeed.cumulativeLayoutShift}</p>
+                                <p><strong>FID:</strong> ${technical.pageSpeed.timeToInteractive}</p>
+                            ` : ''}
+                        </div>
+                    `;
                 } else if (technical.pageSpeed && technical.pageSpeed.error) {
                     html += `
                         <div class="metric-card">
@@ -727,46 +712,31 @@
 
                 // Mobile Responsiveness
                 if (technical.mobileResponsive && !technical.mobileResponsive.error) {
-                    // Handle fallback response (serverless environment)
-                    if (technical.mobileResponsive.fallback) {
-                        html += `
-                            <div class="metric-card">
-                                <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness</h4>
-                                <div class="metric-value status-warning">N/A (Serverless)</div>
-                                <p><strong>Mobile Friendly:</strong> N/A (Serverless)</p>
-                                <p><strong>Viewport Meta:</strong> N/A (Serverless)</p>
-                                <p><strong>Touch Targets:</strong> N/A (Serverless)</p>
-                                <p><strong>Readable Text:</strong> N/A (Serverless)</p>
-                                <p><em>Mobile responsiveness check not available in serverless environment</em></p>
-                            </div>
-                        `;
-                    } else {
-                        // Handle normal response
-                        const mobileScore = technical.mobileResponsive.overallScore || 0;
-                        const mobileClass = mobileScore >= 80 ? 'status-good' : mobileScore >= 60 ? 'status-warning' : 'status-error';
-                        
-                        html += `
-                            <div class="metric-card">
-                                <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness</h4>
-                                <div class="metric-value ${mobileClass}">${mobileScore}/100</div>
-                                <p><strong>Mobile Friendly:</strong> ${technical.mobileResponsive.isMobileFriendly ? '✅ Yes' : '❌ No'}</p>
-                                <p><strong>Viewport Meta:</strong> ${technical.mobileResponsive.hasViewportMeta ? '✅ Present' : '❌ Missing'}</p>
-                                <p><strong>Touch Targets:</strong> ${technical.mobileResponsive.mobile?.touchTargets || 0}</p>
-                                <p><strong>Readable Text:</strong> ${technical.mobileResponsive.mobile?.readableTextElements || 0} elements</p>
-                                ${technical.mobileResponsive.mobile?.hasHorizontalScroll ? 
-                                    '<p class="status-error"><strong>⚠️ Horizontal Scroll:</strong> Content overflows on mobile</p>' : 
-                                    '<p class="status-good"><strong>✅ No Horizontal Scroll</strong></p>'
-                                }
-                                ${technical.mobileResponsive.recommendations && technical.mobileResponsive.recommendations.length > 0 ? `
-                                    <hr>
-                                    <h5>Recommendations</h5>
-                                    <ul>
-                                        ${technical.mobileResponsive.recommendations.map(rec => `<li>${rec}</li>`).join('')}
-                                    </ul>
-                                ` : ''}
-                            </div>
-                        `;
-                    }
+                    // Handle normal response
+                    const mobileScore = technical.mobileResponsive.overallScore || 0;
+                    const mobileClass = mobileScore >= 80 ? 'status-good' : mobileScore >= 60 ? 'status-warning' : 'status-error';
+                    
+                    html += `
+                        <div class="metric-card">
+                            <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness</h4>
+                            <div class="metric-value ${mobileClass}">${mobileScore}/100</div>
+                            <p><strong>Mobile Friendly:</strong> ${technical.mobileResponsive.isMobileFriendly ? '✅ Yes' : '❌ No'}</p>
+                            <p><strong>Viewport Meta:</strong> ${technical.mobileResponsive.hasViewportMeta ? '✅ Present' : '❌ Missing'}</p>
+                            <p><strong>Touch Targets:</strong> ${technical.mobileResponsive.mobile?.touchTargets || 0}</p>
+                            <p><strong>Readable Text:</strong> ${technical.mobileResponsive.mobile?.readableTextElements || 0} elements</p>
+                            ${technical.mobileResponsive.mobile?.hasHorizontalScroll ? 
+                                '<p class="status-error"><strong>⚠️ Horizontal Scroll:</strong> Content overflows on mobile</p>' : 
+                                '<p class="status-good"><strong>✅ No Horizontal Scroll</strong></p>'
+                            }
+                            ${technical.mobileResponsive.recommendations && technical.mobileResponsive.recommendations.length > 0 ? `
+                                <hr>
+                                <h5>Recommendations</h5>
+                                <ul>
+                                    ${technical.mobileResponsive.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                                </ul>
+                            ` : ''}
+                        </div>
+                    `;
                 }
 
                 // Schema Markup

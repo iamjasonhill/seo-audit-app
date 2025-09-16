@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const puppeteer = require('puppeteer');
+const chromium = require('@sparticuz/chromium');
 const robotsParser = require('robots-parser');
 const { URL } = require('url');
 const logger = require('../utils/logger');
@@ -170,32 +171,11 @@ class SEOAuditor {
 
   async runPageSpeedInsights() {
     try {
-      // Check if we're in a serverless environment
-      if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-        logger.warn('Puppeteer/Lighthouse not available in serverless environment, using fallback');
-        return {
-          performance: {
-            score: 0,
-            metrics: {
-              firstContentfulPaint: 'N/A (Serverless)',
-              largestContentfulPaint: 'N/A (Serverless)',
-              firstInputDelay: 'N/A (Serverless)',
-              cumulativeLayoutShift: 'N/A (Serverless)',
-              speedIndex: 'N/A (Serverless)',
-              totalBlockingTime: 'N/A (Serverless)',
-              timeToInteractive: 'N/A (Serverless)'
-            }
-          },
-          accessibility: { score: 0 },
-          bestPractices: { score: 0 },
-          seo: { score: 0 },
-          fallback: true
-        };
-      }
-
+      // Configure Puppeteer for serverless environment
+      const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+      
       const browser = await puppeteer.launch({ 
-        headless: 'new',
-        args: [
+        args: isServerless ? chromium.args : [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
@@ -205,7 +185,8 @@ class SEOAuditor {
           '--single-process',
           '--disable-gpu'
         ],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+        executablePath: isServerless ? await chromium.executablePath() : undefined,
+        headless: isServerless ? chromium.headless : 'new'
       });
       
       // Import Lighthouse dynamically (ES Module)
@@ -322,23 +303,11 @@ class SEOAuditor {
 
   async checkMobileResponsiveness() {
     try {
-      // Check if we're in a serverless environment
-      if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-        logger.warn('Puppeteer not available in serverless environment, using fallback for mobile responsiveness');
-        return {
-          isResponsive: 'N/A (Serverless)',
-          viewportMeta: 'N/A (Serverless)',
-          touchTargets: 'N/A (Serverless)',
-          textReadability: 'N/A (Serverless)',
-          horizontalScroll: 'N/A (Serverless)',
-          recommendations: ['Mobile responsiveness check not available in serverless environment'],
-          fallback: true
-        };
-      }
-
+      // Configure Puppeteer for serverless environment
+      const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
+      
       const browser = await puppeteer.launch({ 
-        headless: 'new',
-        args: [
+        args: isServerless ? chromium.args : [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
@@ -348,7 +317,8 @@ class SEOAuditor {
           '--single-process',
           '--disable-gpu'
         ],
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
+        executablePath: isServerless ? await chromium.executablePath() : undefined,
+        headless: isServerless ? chromium.headless : 'new'
       });
       const page = await browser.newPage();
       
