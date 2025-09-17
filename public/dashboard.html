@@ -339,74 +339,13 @@
                 <div id="gscProperties" style="margin-top:.75rem"></div>
             </div>
 
-            <div class="card audit-history">
-                <h2><i class="fas fa-history"></i> Audit History</h2>
-                <div id="auditHistory">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <p>Loading audit history...</p>
-                    </div>
-                </div>
-            </div>
+            
 
-            <div class="card">
-                <h2><i class="fas fa-search-location"></i> URL Inspection</h2>
-                <div class="form-group">
-                    <label for="inspectUrl">URL to Inspect</label>
-                    <input type="url" id="inspectUrl" placeholder="https://example.com/page" />
-                </div>
-                <button id="inspectBtn" class="audit-btn" style="width:auto"><i class="fas fa-search"></i> Inspect</button>
-                <div id="inspectResult" style="margin-top:1rem"></div>
-            </div>
+            
 
-            <div class="card">
-                <h2><i class="fas fa-chart-pie"></i> GSC Insights</h2>
-                <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.5rem;flex-wrap:wrap">
-                    <div>
-                        <label style="font-size:.85rem;color:#555;margin-right:.25rem">Start</label>
-                        <input type="date" id="gscStart" />
-                    </div>
-                    <div>
-                        <label style="font-size:.85rem;color:#555;margin-right:.25rem">End</label>
-                        <input type="date" id="gscEnd" />
-                    </div>
-                    <div>
-                        <label style="font-size:.85rem;color:#555;margin-right:.25rem">Type</label>
-                        <select id="gscType" style="padding:.4rem;border:1px solid #e1e5e9;border-radius:6px">
-                            <option value="web" selected>Web</option>
-                            <option value="image">Image</option>
-                            <option value="video">Video</option>
-                            <option value="news">News</option>
-                            <option value="discover">Discover</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size:.85rem;color:#555;margin-right:.25rem">Rows</label>
-                        <select id="gscRows" style="padding:.4rem;border:1px solid #e1e5e9;border-radius:6px">
-                            <option value="50" selected>50</option>
-                            <option value="100">100</option>
-                            <option value="500">500</option>
-                        </select>
-                    </div>
-                    <button id="applyRangeBtn" class="audit-btn" style="width:auto;background:#198754"><i class="fas fa-check"></i> Apply</button>
-                    <button id="loadPagesBtn" class="audit-btn" style="width:auto"><i class="fas fa-file-alt"></i> Pages</button>
-                    <button id="loadQueriesBtn" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-search"></i> Queries</button>
-                    <button id="loadDeviceBtn" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-mobile-alt"></i> Device</button>
-                    <button id="loadCountryBtn" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-globe"></i> Country</button>
-                    <button id="loadAppearanceBtn" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-star"></i> Appearance</button>
-                </div>
-                <div id="gscInsights"></div>
-                <div id="gscPager" style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center"></div>
-            </div>
+            
 
-            <div class="card">
-                <h2><i class="fas fa-sitemap"></i> Sitemaps</h2>
-                <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.5rem;flex-wrap:wrap">
-                    <input type="url" id="sitemapUrl" placeholder="https://example.com/sitemap.xml" style="flex:1;padding:.6rem;border:1px solid #e1e5e9;border-radius:6px" />
-                    <button id="submitSitemapBtn" class="audit-btn" style="width:auto"><i class="fas fa-paper-plane"></i> Submit</button>
-                </div>
-                <div id="sitemapsList"></div>
-            </div>
+            
         </div>
 
         <div class="card settings">
@@ -753,7 +692,6 @@
 
             async init() {
                 await this.checkAuthStatus();
-                await this.loadAuditHistory();
                 await this.loadQuickStats();
                 this.initGsc();
             }
