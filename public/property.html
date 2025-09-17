@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Property - SEO Audit App</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:#f5f7fa; color:#333; }
+    .top { background:#fff; box-shadow:0 2px 4px rgba(0,0,0,.08); padding:1rem 2rem; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:5 }
+    .container { max-width:1200px; margin:1.5rem auto; padding:0 1rem; }
+    .h1 { font-size:1.4rem; font-weight:700; display:flex; gap:.5rem; align-items:center; }
+    .tabs { display:flex; gap:.5rem; flex-wrap:wrap; margin:1rem 0; }
+    .tab { background:#e9ecf1; border:none; padding:.5rem .75rem; border-radius:6px; cursor:pointer; }
+    .tab.active { background:#667eea; color:#fff; }
+    .card { background:#fff; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.08); padding:1rem; margin-bottom:1rem; }
+    .controls { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-bottom:.5rem; }
+    .history-table { width:100%; border-collapse:collapse; }
+    .history-table th, .history-table td { padding:.6rem; text-align:left; border-bottom:1px solid #e1e5e9; }
+    .audit-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#fff; border:none; border-radius:6px; padding:.5rem .75rem; cursor:pointer; display:inline-flex; align-items:center; gap:.4rem; }
+    .muted { color:#666; font-size:.9rem }
+    .error { color:#c33; margin:.5rem 0 }
+  </style>
+  <script>
+    // Small helpers reused from dashboard
+    const qs = (k) => new URLSearchParams(location.search).get(k);
+    const fmtNum = (n) => (n ?? 0).toLocaleString();
+    const pct = (v) => (((v ?? 0) * 100) || 0).toFixed(2) + '%';
+
+    async function ensureSelectedProperty(siteUrl) {
+      try {
+        const selResp = await fetch('/api/gsc/selected', { credentials:'include' });
+        const sel = await selResp.json();
+        if (!selResp.ok || !sel.success || sel.selected !== siteUrl) {
+          await fetch('/api/gsc/selected', {
+            method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
+            body: JSON.stringify({ siteUrl })
+          });
+        }
+      } catch (e) {}
+    }
+
+    async function loadKpis(range, searchType) {
+      const el = document.getElementById('kpis');
+      el.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading KPIs...</p>';
+      const url = `/api/gsc/analytics/summary?startDate=${range.start}&endDate=${range.end}&searchType=${searchType}`;
+      const r = await fetch(url, { credentials:'include' }); const d = await r.json();
+      if (!r.ok || !d.success) { el.innerHTML = `<p class="error">${d.message||'Failed to load KPIs'}</p>`; return; }
+      const t = d.totals||{};
+      el.innerHTML = `<div style="display:flex;gap:1rem;flex-wrap:wrap">
+        <div class="card" style="padding:.75rem 1rem"><div class="muted">Clicks</div><div style="font-weight:700;font-size:1.2rem">${fmtNum(t.clicks)}</div></div>
+        <div class="card" style="padding:.75rem 1rem"><div class="muted">Impressions</div><div style="font-weight:700;font-size:1.2rem">${fmtNum(t.impressions)}</div></div>
+        <div class="card" style="padding:.75rem 1rem"><div class="muted">CTR</div><div style="font-weight:700;font-size:1.2rem">${pct(t.ctr)}</div></div>
+        <div class="card" style="padding:.75rem 1rem"><div class="muted">Avg Pos</div><div style="font-weight:700;font-size:1.2rem">${(t.position||0).toFixed(1)}</div></div>
+      </div>`;
+    }
+
+    async function loadAudits(siteUrl) {
+      const el = document.getElementById('audits');
+      el.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading audits...</p>';
+      const r = await fetch(`/api/audit/history/${encodeURIComponent(siteUrl)}?limit=25`, { credentials:'include' });
+      const d = await r.json();
+      if (!r.ok || !d.success) { el.innerHTML = `<p class="error">${d.message||'Failed to load audits'}</p>`; return; }
+      const rows = d.history || [];
+      if (rows.length === 0) { el.innerHTML = '<p class="muted">No audits yet for this property.</p>'; return; }
+      el.innerHTML = `<table class="history-table"><thead><tr><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        ${rows.map(a => `<tr>
+          <td>${new Date(a.createdAt).toLocaleString(undefined,{dateStyle:'short',timeStyle:'short'})}</td>
+          <td>${a.hasResults ? 'Complete' : 'Pending'}</td>
+          <td><a class="audit-btn" href="/report.html?auditId=${a.id}" target="_blank"><i class="fas fa-eye"></i> View</a></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+    }
+
+    function getDefaultRange() {
+      const now = new Date(); const start = new Date(now.getTime() - 27*24*60*60*1000);
+      const iso = (d)=>d.toISOString().slice(0,10);
+      return { start: iso(start), end: iso(now) };
+    }
+
+    async function initPropertyPage() {
+      const site = qs('site');
+      if (!site) { document.getElementById('err').textContent = 'Missing site parameter'; return; }
+      document.getElementById('siteLabel').textContent = site;
+      await ensureSelectedProperty(site);
+
+      // Controls
+      const startEl = document.getElementById('start');
+      const endEl = document.getElementById('end');
+      const typeEl = document.getElementById('stype');
+      const applyBtn = document.getElementById('apply');
+      const range = getDefaultRange();
+      startEl.value = range.start; endEl.value = range.end;
+      const loadAll = async () => {
+        await loadKpis({ start: startEl.value, end: endEl.value }, typeEl.value);
+        await loadAudits(site);
+        // Insights tables reuse dashboard HTML; for now we link back to dashboard for deep dive
+      };
+      applyBtn.addEventListener('click', loadAll);
+      await loadAll();
+    }
+
+    document.addEventListener('DOMContentLoaded', initPropertyPage);
+  </script>
+</head>
+<body>
+  <div class="top">
+    <div class="h1"><i class="fas fa-globe"></i> Property <span class="muted">—</span> <span id="siteLabel" class="muted"></span></div>
+    <div>
+      <a href="/dashboard" class="audit-btn" style="background:#6c757d"><i class="fas fa-arrow-left"></i> Dashboard</a>
+    </div>
+  </div>
+  <div class="container">
+    <div id="err" class="error"></div>
+
+    <div class="card">
+      <div class="controls">
+        <div><label class="muted">Start</label> <input type="date" id="start"></div>
+        <div><label class="muted">End</label> <input type="date" id="end"></div>
+        <div>
+          <label class="muted">Type</label>
+          <select id="stype"><option value="web" selected>Web</option><option value="image">Image</option><option value="video">Video</option><option value="news">News</option><option value="discover">Discover</option></select>
+        </div>
+        <button id="apply" class="audit-btn"><i class="fas fa-check"></i> Apply</button>
+      </div>
+      <div id="kpis"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-history"></i> Recent Audits</h3>
+      <div id="audits"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-chart-line"></i> Deep Dive</h3>
+      <p class="muted">Use the Dashboard “GSC Insights” for full analytics (Pages/Queries/Device/Country/Appearance). We’ll migrate those tables here next.</p>
+      <a class="audit-btn" href="/dashboard" style="background:#198754"><i class="fas fa-table"></i> Open Insights</a>
+    </div>
+  </div>
+</body>
+</html>
+
+

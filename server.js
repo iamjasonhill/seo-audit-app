@@ -89,6 +89,11 @@ app.get('/report', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'report.html'));
 });
 
+// Serve property page
+app.get('/property', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'property.html'));
+});
+
 // Error handling
 app.use(errorHandler);
 

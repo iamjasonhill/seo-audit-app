@@ -358,6 +358,55 @@
                 <button id="inspectBtn" class="audit-btn" style="width:auto"><i class="fas fa-search"></i> Inspect</button>
                 <div id="inspectResult" style="margin-top:1rem"></div>
             </div>
+
+            <div class="card">
+                <h2><i class="fas fa-chart-pie"></i> GSC Insights</h2>
+                <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.5rem;flex-wrap:wrap">
+                    <div>
+                        <label style="font-size:.85rem;color:#555;margin-right:.25rem">Start</label>
+                        <input type="date" id="gscStart" />
+                    </div>
+                    <div>
+                        <label style="font-size:.85rem;color:#555;margin-right:.25rem">End</label>
+                        <input type="date" id="gscEnd" />
+                    </div>
+                    <div>
+                        <label style="font-size:.85rem;color:#555;margin-right:.25rem">Type</label>
+                        <select id="gscType" style="padding:.4rem;border:1px solid #e1e5e9;border-radius:6px">
+                            <option value="web" selected>Web</option>
+                            <option value="image">Image</option>
+                            <option value="video">Video</option>
+                            <option value="news">News</option>
+                            <option value="discover">Discover</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:.85rem;color:#555;margin-right:.25rem">Rows</label>
+                        <select id="gscRows" style="padding:.4rem;border:1px solid #e1e5e9;border-radius:6px">
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="500">500</option>
+                        </select>
+                    </div>
+                    <button id="applyRangeBtn" class="audit-btn" style="width:auto;background:#198754"><i class="fas fa-check"></i> Apply</button>
+                    <button id="loadPagesBtn" class="audit-btn" style="width:auto"><i class="fas fa-file-alt"></i> Pages</button>
+                    <button id="loadQueriesBtn" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-search"></i> Queries</button>
+                    <button id="loadDeviceBtn" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-mobile-alt"></i> Device</button>
+                    <button id="loadCountryBtn" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-globe"></i> Country</button>
+                    <button id="loadAppearanceBtn" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-star"></i> Appearance</button>
+                </div>
+                <div id="gscInsights"></div>
+                <div id="gscPager" style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center"></div>
+            </div>
+
+            <div class="card">
+                <h2><i class="fas fa-sitemap"></i> Sitemaps</h2>
+                <div style="display:flex;gap:.5rem;align-items:center;margin-bottom:.5rem;flex-wrap:wrap">
+                    <input type="url" id="sitemapUrl" placeholder="https://example.com/sitemap.xml" style="flex:1;padding:.6rem;border:1px solid #e1e5e9;border-radius:6px" />
+                    <button id="submitSitemapBtn" class="audit-btn" style="width:auto"><i class="fas fa-paper-plane"></i> Submit</button>
+                </div>
+                <div id="sitemapsList"></div>
+            </div>
         </div>
 
         <div class="card settings">
@@ -450,6 +499,8 @@
                 this.logoutBtn.addEventListener('click', this.handleLogout.bind(this));
                 this.changePasswordForm.addEventListener('submit', this.handleChangePassword.bind(this));
                 this.initUrlInspection();
+                this.initInsights();
+                this.initSitemaps(); // Initialize sitemaps
                 
                 this.init();
 
@@ -513,6 +564,191 @@
                         btn.innerHTML = original;
                     }
                 });
+            }
+
+            initInsights() {
+                const pagesBtn = document.getElementById('loadPagesBtn');
+                const queriesBtn = document.getElementById('loadQueriesBtn');
+                const deviceBtn = document.getElementById('loadDeviceBtn');
+                const countryBtn = document.getElementById('loadCountryBtn');
+                const appearanceBtn = document.getElementById('loadAppearanceBtn');
+                const out = document.getElementById('gscInsights');
+                const startInput = document.getElementById('gscStart');
+                const endInput = document.getElementById('gscEnd');
+                const applyBtn = document.getElementById('applyRangeBtn');
+                const pager = document.getElementById('gscPager');
+                const typeSelect = document.getElementById('gscType');
+                let currentEndpoint = '/api/gsc/analytics/pages';
+                let currentType = 'pages';
+                let rowLimit = 50;
+                let startRow = 0;
+                const rowsSelect = document.getElementById('gscRows');
+                if (rowsSelect) rowsSelect.addEventListener('change', () => {
+                    rowLimit = parseInt(rowsSelect.value || '50', 10);
+                    startRow = 0;
+                    // reload current view
+                    load(currentEndpoint, currentType);
+                });
+                const renderRows = (rows, type) => {
+                    if (!rows || rows.length === 0) {
+                        out.innerHTML = '<p>No data for selected range.</p>';
+                        pager.innerHTML = '';
+                        return;
+                    }
+                    const colLabel = (
+                        type === 'pages' ? 'Page' :
+                        type === 'queries' ? 'Query' :
+                        type === 'device' ? 'Device' :
+                        type === 'country' ? 'Country' :
+                        type === 'appearance' ? 'Appearance' : 'Item'
+                    );
+                    const head = `<th>${colLabel}</th>`;
+                    const firstVal = (r) => (
+                        type === 'pages' ? (r.page || '') :
+                        type === 'queries' ? (r.query || '') :
+                        type === 'device' ? (r.device || '') :
+                        type === 'country' ? (r.country || '') :
+                        type === 'appearance' ? (r.appearance || '') : ''
+                    );
+                    const body = rows.map(r => `
+                        <tr>
+                            <td>${firstVal(r)}</td>
+                            <td>${(r.clicks||0).toLocaleString()}</td>
+                            <td>${(r.impressions||0).toLocaleString()}</td>
+                            <td>${(((r.ctr||0)*100)||0).toFixed(2)}%</td>
+                            <td>${((r.position||0)||0).toFixed(1)}</td>
+                        </tr>`).join('');
+                    out.innerHTML = `
+                        <table class="history-table">
+                            <thead><tr>${head}<th>Clicks</th><th>Impressions</th><th>CTR</th><th>Pos</th></tr></thead>
+                            <tbody>${body}</tbody>
+                        </table>
+                    `;
+                    // Pager UI
+                    pager.innerHTML = `
+                        <button id="pgPrev" class="audit-btn" style="width:auto;background:#6c757d" ${startRow===0?'disabled':''}><i class="fas fa-chevron-left"></i> Prev</button>
+                        <span style="font-size:.9rem;color:#555">Rows ${startRow+1}–${startRow+rows.length}</span>
+                        <button id="pgNext" class="audit-btn" style="width:auto"><i class="fas fa-chevron-right"></i> Next</button>
+                    `;
+                    const nextBtn = document.getElementById('pgNext');
+                    const prevBtn = document.getElementById('pgPrev');
+                    if (prevBtn) prevBtn.onclick = () => { if (startRow>0){ startRow = Math.max(0, startRow - rowLimit); load(currentEndpoint, currentType); } };
+                    if (nextBtn) nextBtn.onclick = () => { startRow += rowLimit; load(currentEndpoint, currentType); };
+                };
+                const buildUrl = (endpoint) => {
+                    const params = new URLSearchParams();
+                    if (startInput && startInput.value) params.append('startDate', startInput.value);
+                    if (endInput && endInput.value) params.append('endDate', endInput.value);
+                    if (typeSelect && typeSelect.value) params.append('searchType', typeSelect.value);
+                    params.append('rowLimit', String(rowLimit));
+                    params.append('startRow', String(startRow));
+                    return `${endpoint}?${params.toString()}`;
+                };
+                const load = async (endpoint, type) => {
+                    currentEndpoint = endpoint; currentType = type;
+                    out.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
+                    try {
+                        const resp = await fetch(buildUrl(endpoint), { credentials: 'include' });
+                        const data = await resp.json();
+                        if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load');
+                        renderRows(data.data, type);
+                    } catch (err) {
+                        out.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
+                        pager.innerHTML = '';
+                    }
+                };
+                // default last 28d
+                const now = new Date();
+                const start = new Date(now.getTime() - 27*24*60*60*1000);
+                const fmt = (d) => {
+                    if (d instanceof Date) return d.toISOString().slice(0,10);
+                    const dd = new Date(d);
+                    if (!isNaN(dd.getTime())) return dd.toISOString().slice(0,10);
+                    return new Date().toISOString().slice(0,10);
+                };
+                if (startInput) startInput.value = fmt(start);
+                if (endInput) endInput.value = fmt(now);
+                if (applyBtn) applyBtn.addEventListener('click', () => {
+                    startRow = 0; // reset paging
+                    const activeMap = [
+                        { btn: pagesBtn, ep: '/api/gsc/analytics/pages', type: 'pages' },
+                        { btn: queriesBtn, ep: '/api/gsc/analytics/queries', type: 'queries' },
+                        { btn: deviceBtn, ep: '/api/gsc/analytics/device', type: 'device' },
+                        { btn: countryBtn, ep: '/api/gsc/analytics/country', type: 'country' },
+                        { btn: appearanceBtn, ep: '/api/gsc/analytics/appearance', type: 'appearance' },
+                    ];
+                    const active = activeMap.find(x => x.btn && x.btn.dataset.active === '1') || activeMap[0];
+                    load(active.ep, active.type);
+                });
+                const setActive = (btn) => {
+                    [pagesBtn, queriesBtn, deviceBtn, countryBtn, appearanceBtn].forEach(b => { if (b) b.dataset.active = (b===btn?'1':'0'); });
+                };
+                if (pagesBtn) pagesBtn.addEventListener('click', () => { setActive(pagesBtn); startRow = 0; load('/api/gsc/analytics/pages', 'pages'); });
+                if (queriesBtn) queriesBtn.addEventListener('click', () => { setActive(queriesBtn); startRow = 0; load('/api/gsc/analytics/queries', 'queries'); });
+                if (deviceBtn) deviceBtn.addEventListener('click', () => { setActive(deviceBtn); startRow = 0; load('/api/gsc/analytics/device', 'device'); });
+                if (countryBtn) countryBtn.addEventListener('click', () => { setActive(countryBtn); startRow = 0; load('/api/gsc/analytics/country', 'country'); });
+                if (appearanceBtn) appearanceBtn.addEventListener('click', () => { setActive(appearanceBtn); startRow = 0; load('/api/gsc/analytics/appearance', 'appearance'); });
+            }
+
+            // Sitemaps panel
+            initSitemaps() {
+                const listDiv = document.getElementById('sitemapsList');
+                const submitBtn = document.getElementById('submitSitemapBtn');
+                const input = document.getElementById('sitemapUrl');
+                const render = (items) => {
+                    if (!items || items.length === 0) {
+                        listDiv.innerHTML = '<p>No sitemaps found for this property.</p>';
+                        return;
+                    }
+                    const rows = items.map(s => `
+                        <tr>
+                            <td>${s.path}</td>
+                            <td>${s.isIndex ? 'Index' : 'File'}</td>
+                            <td>${s.lastSubmitted || '—'}</td>
+                            <td>${s.lastDownloaded || '—'}</td>
+                            <td>${s.warnings||0}</td>
+                            <td>${s.errors||0}</td>
+                        </tr>`).join('');
+                    listDiv.innerHTML = `
+                        <table class="history-table">
+                            <thead><tr><th>Path</th><th>Type</th><th>Last Submitted</th><th>Last Downloaded</th><th>Warnings</th><th>Errors</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    `;
+                };
+                const load = async () => {
+                    listDiv.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading...</p>';
+                    try {
+                        const resp = await fetch('/api/gsc/sitemaps', { credentials: 'include' });
+                        const data = await resp.json();
+                        if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load sitemaps');
+                        render(data.sitemaps);
+                    } catch (err) {
+                        listDiv.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
+                    }
+                };
+                if (submitBtn) submitBtn.addEventListener('click', async () => {
+                    const url = (input.value||'').trim();
+                    if (!url) { this.showError('Enter a sitemap URL to submit'); return; }
+                    const orig = submitBtn.innerHTML; submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting';
+                    try {
+                        const resp = await fetch('/api/gsc/sitemaps/submit', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ sitemapUrl: url })
+                        });
+                        const data = await resp.json();
+                        if (!resp.ok || !data.success) throw new Error(data.message || 'Submit failed');
+                        this.showSuccess('Sitemap submitted');
+                        await load();
+                    } catch (err) {
+                        this.showError(err.message);
+                    } finally {
+                        submitBtn.disabled = false; submitBtn.innerHTML = orig;
+                    }
+                });
+                load();
             }
 
             async init() {
@@ -863,12 +1099,17 @@
                                         <label for="${selectorId}" style="display:block;margin-bottom:.25rem;font-weight:500">Active Property</label>
                                         <select id="${selectorId}" style="padding:.5rem;border:1px solid #e1e5e9;border-radius:6px;min-width:320px">${options}</select>
                                         <button id="saveGscSelection" class="audit-btn" style="width:auto;margin-left:.5rem"><i class="fas fa-save"></i> Save</button>
+                                        <a id="openProperty" class="audit-btn" style="width:auto;margin-left:.5rem;background:#198754" target="_blank"><i class="fas fa-arrow-up-right-from-square"></i> Open</a>
                                     </div>
                                     <div id="gscKpis" style="margin-top:.5rem"></div>
                                 `;
                                 // Preselect
                                 const sel = document.getElementById(selectorId);
                                 if (selectedSite) sel.value = selectedSite;
+                                const openBtn = document.getElementById('openProperty');
+                                const setOpenHref = () => { openBtn.href = `/property?site=${encodeURIComponent(sel.value)}`; };
+                                setOpenHref();
+                                sel.addEventListener('change', setOpenHref);
                                 document.getElementById('saveGscSelection').addEventListener('click', async () => {
                                     const siteUrl = sel.value;
                                     const btn = document.getElementById('saveGscSelection');
@@ -886,6 +1127,8 @@
                                         if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to set property');
                                         this.showSuccess('Active property saved');
                                         await this.loadGscKpis();
+                                        // Reload sitemaps panel for the selected property
+                                        if (this.initSitemaps) this.initSitemaps();
                                     } catch (err) {
                                         this.showError(err.message);
                                     } finally {
@@ -910,12 +1153,15 @@
                 const kpisDiv = document.getElementById('gscKpis');
                 if (!kpisDiv) return;
                 kpisDiv.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading KPIs...</p>';
-                const end = new Date();
-                const start = new Date();
-                start.setDate(end.getDate() - 27);
-                const fmt = d => d.toISOString().slice(0,10);
+                const startVal = (document.getElementById('gscStart')?.value || '').trim();
+                const endVal = (document.getElementById('gscEnd')?.value || '').trim();
+                const type = (document.getElementById('gscType')?.value || 'web');
+                if (!startVal || !endVal) {
+                    kpisDiv.innerHTML = '<p>Please select a date range to view insights.</p>';
+                    return;
+                }
                 try {
-                    const url = `/api/gsc/analytics/summary?startDate=${fmt(start)}&endDate=${fmt(end)}`;
+                    const url = `/api/gsc/analytics/summary?startDate=${encodeURIComponent(startVal)}&endDate=${encodeURIComponent(endVal)}&searchType=${encodeURIComponent(type)}`;
                     const resp = await fetch(url, { credentials: 'include' });
                     const data = await resp.json();
                     if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load KPIs');
@@ -927,25 +1173,48 @@
                     kpisDiv.innerHTML = `
                         <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:.5rem">
                             <div class="card" style="padding:.75rem 1rem">
-                                <div style="font-size:.9rem;color:#666">Clicks (28d)</div>
+                                <div style="font-size:.9rem;color:#666">Clicks</div>
                                 <div style="font-size:1.25rem;font-weight:600">${clicks}</div>
                             </div>
                             <div class="card" style="padding:.75rem 1rem">
-                                <div style="font-size:.9rem;color:#666">Impressions (28d)</div>
+                                <div style="font-size:.9rem;color:#666">Impressions</div>
                                 <div style="font-size:1.25rem;font-weight:600">${impr}</div>
                             </div>
                             <div class="card" style="padding:.75rem 1rem">
-                                <div style="font-size:.9rem;color:#666">CTR (28d)</div>
+                                <div style="font-size:.9rem;color:#666">CTR</div>
                                 <div style="font-size:1.25rem;font-weight:600">${ctr}</div>
                             </div>
                             <div class="card" style="padding:.75rem 1rem">
-                                <div style="font-size:.9rem;color:#666">Avg Position (28d)</div>
+                                <div style="font-size:.9rem;color:#666">Avg Position</div>
                                 <div style="font-size:1.25rem;font-weight:600">${pos}</div>
                             </div>
                         </div>
                     `;
                 } catch (err) {
                     kpisDiv.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
+                }
+            }
+
+            async loadSitemaps() {
+                const sitemapsList = document.getElementById('sitemapsList');
+                if (!sitemapsList) return;
+                sitemapsList.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading sitemaps...</p>';
+                try {
+                    const resp = await fetch('/api/gsc/sitemaps', { credentials: 'include' });
+                    const data = await resp.json();
+                    if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load sitemaps');
+                    if (data.sitemaps && data.sitemaps.length > 0) {
+                        sitemapsList.innerHTML = `
+                            <h3>Submitted Sitemaps</h3>
+                            <ul>
+                                ${data.sitemaps.map(s => `<li>${s.url} (${s.lastSubmitted})</li>`).join('')}
+                            </ul>
+                        `;
+                    } else {
+                        sitemapsList.innerHTML = '<p>No sitemaps submitted yet.</p>';
+                    }
+                } catch (err) {
+                    sitemapsList.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
                 }
             }
 
