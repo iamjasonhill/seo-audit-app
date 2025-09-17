@@ -358,6 +358,7 @@
                     <label for="currentPassword">Current Password</label>
                     <div style="display:flex;gap:.5rem;align-items:center">
                         <input type="password" id="currentPassword" name="currentPassword" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required style="flex:1">
+                        <input type="text" id="currentPasswordText" style="flex:1; display:none" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
                         <button type="button" class="view-toggle" data-target="currentPassword" title="Show/Hide" style="padding:.5rem 0.6rem;border:1px solid #e1e5e9;border-radius:6px;background:#fff"><i class="fas fa-eye"></i></button>
                     </div>
                 </div>
@@ -366,6 +367,7 @@
                     <label for="newPassword">New Password</label>
                     <div style="display:flex;gap:.5rem;align-items:center">
                         <input type="password" id="newPassword" name="newPassword" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" required placeholder="Min 12 chars, upper/lower/number/symbol" style="flex:1">
+                        <input type="text" id="newPasswordText" style="flex:1; display:none" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Min 12 chars, upper/lower/number/symbol">
                         <button type="button" class="view-toggle" data-target="newPassword" title="Show/Hide" style="padding:.5rem 0.6rem;border:1px solid #e1e5e9;border-radius:6px;background:#fff"><i class="fas fa-eye"></i></button>
                     </div>
                 </div>
@@ -373,6 +375,7 @@
                     <label for="confirmPassword">Confirm New Password</label>
                     <div style="display:flex;gap:.5rem;align-items:center">
                         <input type="password" id="confirmPassword" name="confirmPassword" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" required style="flex:1">
+                        <input type="text" id="confirmPasswordText" style="flex:1; display:none" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
                         <button type="button" class="view-toggle" data-target="confirmPassword" title="Show/Hide" style="padding:.5rem 0.6rem;border:1px solid #e1e5e9;border-radius:6px;background:#fff"><i class="fas fa-eye"></i></button>
                     </div>
                 </div>
@@ -401,10 +404,29 @@
                 document.querySelectorAll('.view-toggle').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const id = btn.getAttribute('data-target');
-                        const input = document.getElementById(id);
-                        const showing = input.type === 'text';
-                        input.type = showing ? 'password' : 'text';
-                        btn.innerHTML = showing ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+                        const pwd = document.getElementById(id);
+                        const txt = document.getElementById(id + 'Text');
+                        const showing = txt && txt.style.display !== 'none';
+                        if (!txt) {
+                            // Fallback for browsers that support toggling natively
+                            const isPlain = pwd.type === 'text';
+                            pwd.type = isPlain ? 'password' : 'text';
+                            btn.innerHTML = isPlain ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+                            return;
+                        }
+                        if (showing) {
+                            // Switch to password field
+                            pwd.value = txt.value;
+                            txt.style.display = 'none';
+                            pwd.style.display = '';
+                            btn.innerHTML = '<i class="fas fa-eye"></i>';
+                        } else {
+                            // Switch to text field (Safari-friendly)
+                            txt.value = pwd.value;
+                            pwd.style.display = 'none';
+                            txt.style.display = '';
+                            btn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                        }
                     });
                 });
                 
