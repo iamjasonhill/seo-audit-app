@@ -16,6 +16,7 @@ const databaseService = require('./src/services/database');
 const auditRoutes = require('./src/routes/audit');
 const reportRoutes = require('./src/routes/reports');
 const authRoutes = require('./src/routes/auth');
+const gscRoutes = require('./src/routes/gsc');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -57,6 +58,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/auth', authRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/gsc', gscRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

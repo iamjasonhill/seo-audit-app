@@ -332,6 +332,11 @@
                     <p><strong>Last Audit:</strong> <span id="lastAudit">-</span></p>
                     <p><strong>Most Audited Site:</strong> <span id="mostAudited">-</span></p>
                 </div>
+                <div style="margin-top:1rem; display:flex; gap:.5rem; align-items:center;">
+                    <button id="connectGscBtn" class="audit-btn" style="width:auto"><i class="fab fa-google"></i> Connect Google Search Console</button>
+                    <button id="listGscPropsBtn" class="audit-btn" style="width:auto; background:#6c757d"><i class="fas fa-list"></i> List Properties</button>
+                </div>
+                <div id="gscProperties" style="margin-top:.75rem"></div>
             </div>
 
             <div class="card audit-history">
@@ -342,6 +347,16 @@
                         <p>Loading audit history...</p>
                     </div>
                 </div>
+            </div>
+
+            <div class="card">
+                <h2><i class="fas fa-search-location"></i> URL Inspection</h2>
+                <div class="form-group">
+                    <label for="inspectUrl">URL to Inspect</label>
+                    <input type="url" id="inspectUrl" placeholder="https://example.com/page" />
+                </div>
+                <button id="inspectBtn" class="audit-btn" style="width:auto"><i class="fas fa-search"></i> Inspect</button>
+                <div id="inspectResult" style="margin-top:1rem"></div>
             </div>
         </div>
 
@@ -434,6 +449,7 @@
                 this.quickTestBtn.addEventListener('click', this.handleQuickTest.bind(this));
                 this.logoutBtn.addEventListener('click', this.handleLogout.bind(this));
                 this.changePasswordForm.addEventListener('submit', this.handleChangePassword.bind(this));
+                this.initUrlInspection();
                 
                 this.init();
 
@@ -444,10 +460,66 @@
                 }, 60);
             }
 
+            initUrlInspection() {
+                const btn = document.getElementById('inspectBtn');
+                const input = document.getElementById('inspectUrl');
+                const out = document.getElementById('inspectResult');
+                if (!btn || !input || !out) return;
+                btn.addEventListener('click', async () => {
+                    const url = (input.value || '').trim();
+                    if (!url) { this.showError('Enter a URL to inspect'); return; }
+                    const original = btn.innerHTML;
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inspecting...';
+                    out.innerHTML = '';
+                    try {
+                        const resp = await fetch('/api/gsc/url/inspect', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ url })
+                        });
+                        const data = await resp.json();
+                        if (!resp.ok || !data.success) throw new Error(data.message || 'Inspection failed');
+                        const r = data.result || {};
+                        const idx = r.indexStatusResult || {};
+                        const mobi = r.mobileUsabilityResult || {};
+                        const amp = r.ampResult || {};
+                        out.innerHTML = `
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:.5rem">
+                                <div class="card" style="padding:.75rem 1rem">
+                                    <div style="font-weight:600;margin-bottom:.25rem">Index Status</div>
+                                    <div><strong>Verdict:</strong> ${idx.verdict || 'Unknown'}</div>
+                                    <div><strong>Coverage State:</strong> ${idx.coverageState || 'Unknown'}</div>
+                                    <div><strong>Last Crawl:</strong> ${idx.lastCrawlTime || '—'}</div>
+                                    <div><strong>Robots:</strong> ${idx.robotsTxtState || 'Unknown'}</div>
+                                    <div><strong>Noindex:</strong> ${idx.indexingState || 'Unknown'}</div>
+                                    <div><strong>User Canonical:</strong> ${idx.userCanonical || '—'}</div>
+                                    <div><strong>Google Canonical:</strong> ${idx.googleCanonical || '—'}</div>
+                                </div>
+                                <div class="card" style="padding:.75rem 1rem">
+                                    <div style="font-weight:600;margin-bottom:.25rem">Mobile Usability</div>
+                                    <div><strong>Status:</strong> ${mobi.verdict || 'Unknown'}</div>
+                                    <div><strong>Issues:</strong> ${(mobi.issues && mobi.issues.length) ? mobi.issues.map(i=>i.message).join(', ') : 'None reported'}</div>
+                                    <div style="font-weight:600;margin:.75rem 0 .25rem">AMP</div>
+                                    <div><strong>Status:</strong> ${amp.verdict || 'Unknown'}</div>
+                                </div>
+                            </div>
+                        `;
+                    } catch (err) {
+                        out.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerHTML = original;
+                    }
+                });
+            }
+
             async init() {
                 await this.checkAuthStatus();
                 await this.loadAuditHistory();
                 await this.loadQuickStats();
+                this.initGsc();
             }
 
             async checkAuthStatus() {
@@ -731,6 +803,149 @@
                     }
                 } catch (error) {
                     console.error('Error loading quick stats:', error);
+                }
+            }
+
+            initGsc() {
+                const connectBtn = document.getElementById('connectGscBtn');
+                const listBtn = document.getElementById('listGscPropsBtn');
+                const propsDiv = document.getElementById('gscProperties');
+
+                if (connectBtn) {
+                    connectBtn.addEventListener('click', async () => {
+                        connectBtn.disabled = true;
+                        connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
+                        try {
+                            const resp = await fetch('/api/gsc/connect', { credentials: 'include' });
+                            const data = await resp.json();
+                            if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to init OAuth');
+                            window.location.href = data.authUrl;
+                        } catch (err) {
+                            this.showError(err.message || 'Failed to connect to Google');
+                            connectBtn.disabled = false;
+                            connectBtn.innerHTML = '<i class="fab fa-google"></i> Connect Google Search Console';
+                        }
+                    });
+                }
+
+                // Try to bind tokens if we just returned from OAuth
+                (async () => {
+                    try {
+                        const resp = await fetch('/api/gsc/bind', { method: 'POST', credentials: 'include' });
+                        // ignore result; if tokens existed they'll be bound
+                    } catch (e) { /* noop */ }
+                })();
+
+                if (listBtn) {
+                    listBtn.addEventListener('click', async () => {
+                        listBtn.disabled = true;
+                        const original = listBtn.innerHTML;
+                        listBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading';
+                        try {
+                            // Load current selection
+                            let selectedSite = null;
+                            try {
+                                const selResp = await fetch('/api/gsc/selected', { credentials: 'include' });
+                                const selData = await selResp.json();
+                                if (selResp.ok && selData.success) selectedSite = selData.selected || null;
+                            } catch (e) {}
+
+                            const resp = await fetch('/api/gsc/properties', { credentials: 'include' });
+                            const data = await resp.json();
+                            if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load properties');
+                            if (!data.properties || data.properties.length === 0) {
+                                propsDiv.innerHTML = '<p>No verified properties found for this account.</p>';
+                            } else {
+                                const selectorId = 'gscPropertySelect';
+                                const options = data.properties.map(p => `<option value="${p.siteUrl}">${p.siteUrl}</option>`).join('');
+                                propsDiv.innerHTML = `
+                                    <div style="margin:.5rem 0">
+                                        <label for="${selectorId}" style="display:block;margin-bottom:.25rem;font-weight:500">Active Property</label>
+                                        <select id="${selectorId}" style="padding:.5rem;border:1px solid #e1e5e9;border-radius:6px;min-width:320px">${options}</select>
+                                        <button id="saveGscSelection" class="audit-btn" style="width:auto;margin-left:.5rem"><i class="fas fa-save"></i> Save</button>
+                                    </div>
+                                    <div id="gscKpis" style="margin-top:.5rem"></div>
+                                `;
+                                // Preselect
+                                const sel = document.getElementById(selectorId);
+                                if (selectedSite) sel.value = selectedSite;
+                                document.getElementById('saveGscSelection').addEventListener('click', async () => {
+                                    const siteUrl = sel.value;
+                                    const btn = document.getElementById('saveGscSelection');
+                                    const orig = btn.innerHTML;
+                                    btn.disabled = true;
+                                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving';
+                                    try {
+                                        const resp = await fetch('/api/gsc/selected', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            credentials: 'include',
+                                            body: JSON.stringify({ siteUrl })
+                                        });
+                                        const data = await resp.json();
+                                        if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to set property');
+                                        this.showSuccess('Active property saved');
+                                        await this.loadGscKpis();
+                                    } catch (err) {
+                                        this.showError(err.message);
+                                    } finally {
+                                        btn.disabled = false;
+                                        btn.innerHTML = orig;
+                                    }
+                                });
+                                // Load KPIs if selection exists
+                                await this.loadGscKpis();
+                            }
+                        } catch (err) {
+                            propsDiv.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
+                        } finally {
+                            listBtn.disabled = false;
+                            listBtn.innerHTML = original;
+                        }
+                    });
+                }
+            }
+
+            async loadGscKpis() {
+                const kpisDiv = document.getElementById('gscKpis');
+                if (!kpisDiv) return;
+                kpisDiv.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading KPIs...</p>';
+                const end = new Date();
+                const start = new Date();
+                start.setDate(end.getDate() - 27);
+                const fmt = d => d.toISOString().slice(0,10);
+                try {
+                    const url = `/api/gsc/analytics/summary?startDate=${fmt(start)}&endDate=${fmt(end)}`;
+                    const resp = await fetch(url, { credentials: 'include' });
+                    const data = await resp.json();
+                    if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load KPIs');
+                    const t = data.totals || {};
+                    const clicks = (t.clicks ?? 0).toLocaleString();
+                    const impr = (t.impressions ?? 0).toLocaleString();
+                    const ctr = (((t.ctr ?? 0) * 100) || 0).toFixed(2) + '%';
+                    const pos = ((t.position ?? 0) || 0).toFixed(1);
+                    kpisDiv.innerHTML = `
+                        <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:.5rem">
+                            <div class="card" style="padding:.75rem 1rem">
+                                <div style="font-size:.9rem;color:#666">Clicks (28d)</div>
+                                <div style="font-size:1.25rem;font-weight:600">${clicks}</div>
+                            </div>
+                            <div class="card" style="padding:.75rem 1rem">
+                                <div style="font-size:.9rem;color:#666">Impressions (28d)</div>
+                                <div style="font-size:1.25rem;font-weight:600">${impr}</div>
+                            </div>
+                            <div class="card" style="padding:.75rem 1rem">
+                                <div style="font-size:.9rem;color:#666">CTR (28d)</div>
+                                <div style="font-size:1.25rem;font-weight:600">${ctr}</div>
+                            </div>
+                            <div class="card" style="padding:.75rem 1rem">
+                                <div style="font-size:.9rem;color:#666">Avg Position (28d)</div>
+                                <div style="font-size:1.25rem;font-weight:600">${pos}</div>
+                            </div>
+                        </div>
+                    `;
+                } catch (err) {
+                    kpisDiv.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
                 }
             }
 
