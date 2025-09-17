@@ -693,9 +693,19 @@
 
             async handleChangePassword(e) {
                 e.preventDefault();
-                const currentPassword = document.getElementById('currentPassword').value;
-                const newPassword = document.getElementById('newPassword').value;
-                const confirmPassword = document.getElementById('confirmPassword').value;
+                const getFieldValue = (baseId) => {
+                    const pwd = document.getElementById(baseId);
+                    const txt = document.getElementById(baseId + 'Text');
+                    if (txt && txt.style.display !== 'none') {
+                        // Visible text mirror is active (Safari show mode)
+                        return txt.value;
+                    }
+                    return pwd ? pwd.value : '';
+                };
+
+                const currentPassword = getFieldValue('currentPassword');
+                const newPassword = getFieldValue('newPassword');
+                const confirmPassword = getFieldValue('confirmPassword');
 
                 this.pwdError.style.display = 'none';
                 this.pwdSuccess.style.display = 'none';
