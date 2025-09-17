@@ -40,6 +40,17 @@
       } catch (e) {}
     }
 
+    function deriveAuditUrl(siteParam) {
+      if (!siteParam) return '';
+      if (siteParam.startsWith('sc-domain:')) {
+        const domain = siteParam.replace('sc-domain:', '').trim();
+        if (!domain) return '';
+        return `https://${domain}/`;
+      }
+      if (/^https?:\/\//i.test(siteParam)) return siteParam;
+      return siteParam;
+    }
+
     async function loadKpis(range, searchType) {
       const el = document.getElementById('kpis');
       el.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading KPIs...</p>';
@@ -84,6 +95,32 @@
       document.getElementById('siteLabel').textContent = site;
       await ensureSelectedProperty(site);
 
+      // New Audit form
+      const auditUrlEl = document.getElementById('auditUrl');
+      const auditTypeEl = document.getElementById('auditType');
+      const runBtn = document.getElementById('runAuditBtn');
+      const auditMsg = document.getElementById('auditMsg');
+      const defaultUrl = deriveAuditUrl(site);
+      if (auditUrlEl) auditUrlEl.value = defaultUrl;
+      if (runBtn) runBtn.addEventListener('click', async () => {
+        const url = (auditUrlEl.value || '').trim();
+        const sType = auditTypeEl.value;
+        auditMsg.textContent = '';
+        if (!/^https?:\/\//i.test(url)) { auditMsg.textContent = 'Please enter a valid URL (including http/https).'; return; }
+        const original = runBtn.innerHTML; runBtn.disabled = true; runBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+        try {
+          const resp = await fetch('/api/audit', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ siteUrl: url, siteType: sType }) });
+          const data = await resp.json();
+          if (!resp.ok || !data.success) throw new Error(data.message || 'Audit failed');
+          auditMsg.style.color = '#155724';
+          auditMsg.textContent = 'Audit completed successfully';
+          await loadAudits(url);
+        } catch (e) {
+          auditMsg.style.color = '#c33';
+          auditMsg.textContent = e.message;
+        } finally { runBtn.disabled = false; runBtn.innerHTML = original; }
+      });
+
       // Controls
       const startEl = document.getElementById('start');
       const endEl = document.getElementById('end');
@@ -94,7 +131,8 @@
       const loadAll = async () => {
         await loadKpis({ start: startEl.value, end: endEl.value }, typeEl.value);
         await loadAudits(site);
-        // Insights tables reuse dashboard HTML; for now we link back to dashboard for deep dive
+        // Load insights (current active tab)
+        if (window.__insightsLoad) await window.__insightsLoad();
       };
       applyBtn.addEventListener('click', loadAll);
       await loadAll();
@@ -112,6 +150,28 @@
   </div>
   <div class="container">
     <div id="err" class="error"></div>
+
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-play"></i> New Audit</h3>
+      <div class="controls">
+        <div style="flex:1">
+          <label class="muted">URL</label>
+          <input type="url" id="auditUrl" placeholder="https://example.com/" style="width:100%;padding:.6rem;border:1px solid #e1e5e9;border-radius:6px">
+        </div>
+        <div>
+          <label class="muted">Site Type</label>
+          <select id="auditType" style="padding:.6rem;border:1px solid #e1e5e9;border-radius:6px">
+            <option value="Generic" selected>Generic</option>
+            <option value="SaaS">SaaS</option>
+            <option value="Ecommerce">Ecommerce</option>
+            <option value="Agency">Agency</option>
+            <option value="Local">Local</option>
+          </select>
+        </div>
+        <button id="runAuditBtn" class="audit-btn"><i class="fas fa-play"></i> Run Audit</button>
+      </div>
+      <div id="auditMsg" class="muted" style="margin-top:.5rem"></div>
+    </div>
 
     <div class="card">
       <div class="controls">
@@ -132,11 +192,103 @@
     </div>
 
     <div class="card">
-      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-chart-line"></i> Deep Dive</h3>
-      <p class="muted">Use the Dashboard “GSC Insights” for full analytics (Pages/Queries/Device/Country/Appearance). We’ll migrate those tables here next.</p>
-      <a class="audit-btn" href="/dashboard" style="background:#198754"><i class="fas fa-table"></i> Open Insights</a>
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-chart-pie"></i> GSC Insights</h3>
+      <div class="controls">
+        <div>
+          <label class="muted">Rows</label>
+          <select id="prow" style="padding:.4rem;border:1px solid #e1e5e9;border-radius:6px">
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+          </select>
+        </div>
+        <button id="pPages"   class="audit-btn"><i class="fas fa-file-alt"></i> Pages</button>
+        <button id="pQueries" class="audit-btn" style="background:#6c757d"><i class="fas fa-search"></i> Queries</button>
+        <button id="pDevice"  class="audit-btn" style="background:#6c757d"><i class="fas fa-mobile-alt"></i> Device</button>
+        <button id="pCountry" class="audit-btn" style="background:#6c757d"><i class="fas fa-globe"></i> Country</button>
+        <button id="pAppear"  class="audit-btn" style="background:#6c757d"><i class="fas fa-star"></i> Appearance</button>
+      </div>
+      <div id="pInsights"></div>
+      <div id="pPager" style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center"></div>
     </div>
   </div>
+
+  <script>
+    // Insights logic for property page
+    (function(){
+      const byId = (id) => document.getElementById(id);
+      const startEl = byId('start');
+      const endEl = byId('end');
+      const typeEl = byId('stype');
+      const rowsEl = byId('prow');
+      const out = byId('pInsights');
+      const pager = byId('pPager');
+      const btns = {
+        pages: byId('pPages'),
+        queries: byId('pQueries'),
+        device: byId('pDevice'),
+        country: byId('pCountry'),
+        appearance: byId('pAppear')
+      };
+      let endpoint = '/api/gsc/analytics/pages';
+      let tab = 'pages';
+      let rowLimit = 50;
+      let startRow = 0;
+
+      const setActive = (key) => {
+        Object.entries(btns).forEach(([k, b]) => { if (b) b.style.background = (k===key? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : '#6c757d'); });
+      };
+
+      const buildUrl = () => {
+        const params = new URLSearchParams();
+        params.append('startDate', startEl.value);
+        params.append('endDate', endEl.value);
+        params.append('searchType', typeEl.value);
+        params.append('rowLimit', String(rowLimit));
+        params.append('startRow', String(startRow));
+        return `${endpoint}?${params.toString()}`;
+      };
+
+      const render = (rows) => {
+        if (!rows || rows.length === 0) { out.innerHTML = '<p class="muted">No data for selected range.</p>'; pager.innerHTML=''; return; }
+        const label = tab==='pages'?'Page':tab==='queries'?'Query':tab==='device'?'Device':tab==='country'?'Country':'Appearance';
+        const firstVal = (r)=> tab==='pages'?r.page: tab==='queries'?r.query: tab==='device'?r.device: tab==='country'?r.country: r.appearance;
+        out.innerHTML = `<table class="history-table"><thead><tr><th>${label}</th><th>Clicks</th><th>Impr</th><th>CTR</th><th>Pos</th></tr></thead><tbody>
+          ${rows.map(r=>`<tr><td>${firstVal(r)||''}</td><td>${(r.clicks||0).toLocaleString()}</td><td>${(r.impressions||0).toLocaleString()}</td><td>${(((r.ctr||0)*100)||0).toFixed(2)}%</td><td>${((r.position||0)||0).toFixed(1)}</td></tr>`).join('')}
+        </tbody></table>`;
+        pager.innerHTML = `
+          <button id="pgPrev2" class="audit-btn" style="width:auto;background:#6c757d" ${startRow===0?'disabled':''}><i class="fas fa-chevron-left"></i> Prev</button>
+          <span class="muted">Rows ${startRow+1}–${startRow+rows.length}</span>
+          <button id="pgNext2" class="audit-btn" style="width:auto"><i class="fas fa-chevron-right"></i> Next</button>`;
+        const prev = byId('pgPrev2'); const next = byId('pgNext2');
+        if (prev) prev.onclick = ()=>{ if (startRow>0){ startRow=Math.max(0,startRow-rowLimit); load(); }};
+        if (next) next.onclick = ()=>{ startRow += rowLimit; load(); };
+      };
+
+      async function load(){
+        out.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading…</p>';
+        try {
+          const r = await fetch(buildUrl(), { credentials:'include' });
+          const d = await r.json();
+          if (!r.ok || !d.success) throw new Error(d.message||'Failed to load');
+          render(d.data);
+        } catch(e){ out.innerHTML = `<p class="error">${e.message}</p>`; pager.innerHTML=''; }
+      }
+
+      // public hook so the top Apply button can reload current tab
+      window.__insightsLoad = load;
+
+      if (rowsEl) rowsEl.onchange = ()=>{ rowLimit=parseInt(rowsEl.value||'50',10); startRow=0; load(); };
+      if (btns.pages) btns.pages.onclick = ()=>{ endpoint='/api/gsc/analytics/pages'; tab='pages'; setActive('pages'); startRow=0; load(); };
+      if (btns.queries) btns.queries.onclick = ()=>{ endpoint='/api/gsc/analytics/queries'; tab='queries'; setActive('queries'); startRow=0; load(); };
+      if (btns.device) btns.device.onclick = ()=>{ endpoint='/api/gsc/analytics/device'; tab='device'; setActive('device'); startRow=0; load(); };
+      if (btns.country) btns.country.onclick = ()=>{ endpoint='/api/gsc/analytics/country'; tab='country'; setActive('country'); startRow=0; load(); };
+      if (btns.appearance) btns.appearance.onclick = ()=>{ endpoint='/api/gsc/analytics/appearance'; tab='appearance'; setActive('appearance'); startRow=0; load(); };
+
+      // default
+      setActive('pages'); load();
+    })();
+  </script>
 </body>
 </html>
 
