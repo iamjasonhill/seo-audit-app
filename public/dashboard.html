@@ -540,7 +540,7 @@
 
             async loadAuditHistory() {
                 try {
-                    const response = await fetch('/api/audit/list?limit=10', {
+                    const response = await fetch('/api/audit/list?limit=25', {
                         credentials: 'include'
                     });
                     const data = await response.json();
@@ -565,6 +565,7 @@
                     <table class="history-table">
                         <thead>
                             <tr>
+                                <th style="width:32px"><input type="checkbox" id="selectAllAudits"></th>
                                 <th>Site URL</th>
                                 <th>Type</th>
                                 <th>Date &amp; Time</th>
@@ -575,6 +576,7 @@
                         <tbody>
                             ${audits.map(audit => `
                                 <tr>
+                                    <td><input type="checkbox" class="audit-select" data-audit-id="${audit.id}"></td>
                                     <td>${audit.siteUrl}</td>
                                     <td>${audit.siteType}</td>
                                     <td>${new Date(audit.createdAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}</td>
@@ -597,6 +599,10 @@
                             `).join('')}
                         </tbody>
                     </table>
+                    <div style="margin-top:.75rem; display:flex; gap:.5rem; align-items:center">
+                        <button class="delete-btn" id="deleteSelectedBtn" style="background:#b22222"><i class="fas fa-trash"></i> Delete Selected</button>
+                        <span id="selectedCount" style="font-size:.9rem; color:#555"></span>
+                    </div>
                 `;
 
                 this.auditHistory.innerHTML = table;
@@ -604,9 +610,32 @@
                 this.auditHistory.querySelectorAll('.delete-btn').forEach(button => {
                     button.addEventListener('click', (event) => {
                         event.preventDefault();
-                        this.handleDeleteAudit(button.dataset.auditId, button);
+                        if (button.id === 'deleteSelectedBtn') {
+                            this.handleBulkDelete(button);
+                        } else {
+                            this.handleDeleteAudit(button.dataset.auditId, button);
+                        }
                     });
                 });
+
+                // Select-all and selection count
+                const selectAll = document.getElementById('selectAllAudits');
+                const checkboxes = Array.from(this.auditHistory.querySelectorAll('.audit-select'));
+                const selectedCount = document.getElementById('selectedCount');
+                const updateCount = () => {
+                    const count = checkboxes.filter(cb => cb.checked).length;
+                    selectedCount.textContent = count ? `${count} selected` : '';
+                };
+                if (selectAll) {
+                    selectAll.addEventListener('change', () => {
+                        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+                        updateCount();
+                    });
+                }
+                checkboxes.forEach(cb => cb.addEventListener('change', () => {
+                    if (!cb.checked && selectAll) selectAll.checked = false;
+                    updateCount();
+                }));
             }
 
             async handleDeleteAudit(auditId, button) {
@@ -641,6 +670,35 @@
                 } finally {
                     button.disabled = false;
                     button.innerHTML = originalContent;
+                }
+            }
+
+            async handleBulkDelete(button) {
+                const ids = Array.from(this.auditHistory.querySelectorAll('.audit-select:checked')).map(cb => cb.dataset.auditId);
+                if (ids.length === 0) {
+                    alert('Please select at least one audit to delete.');
+                    return;
+                }
+                const confirmed = confirm(`Delete ${ids.length} audit(s)? This cannot be undone.`);
+                if (!confirmed) return;
+
+                const original = button.innerHTML;
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting';
+                try {
+                    for (const id of ids) {
+                        const res = await fetch(`/api/audit/${id}`, { method: 'DELETE', credentials: 'include' });
+                        const data = await res.json();
+                        if (!res.ok || !data.success) throw new Error(data.message || 'Delete failed');
+                    }
+                    this.showSuccess(`${ids.length} audit(s) deleted.`);
+                    await this.loadAuditHistory();
+                    await this.loadQuickStats();
+                } catch (err) {
+                    this.showError(err.message || 'Bulk delete failed.');
+                } finally {
+                    button.disabled = false;
+                    button.innerHTML = original;
                 }
             }
 
