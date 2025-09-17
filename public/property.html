@@ -66,16 +66,43 @@
       </div>`;
     }
 
-    async function loadAudits(siteUrl) {
+    async function loadAudits(siteParam) {
       const el = document.getElementById('audits');
       el.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading audits...</p>';
-      const r = await fetch(`/api/audit/history/${encodeURIComponent(siteUrl)}?limit=25`, { credentials:'include' });
-      const d = await r.json();
-      if (!r.ok || !d.success) { el.innerHTML = `<p class="error">${d.message||'Failed to load audits'}</p>`; return; }
-      const rows = d.history || [];
-      if (rows.length === 0) { el.innerHTML = '<p class="muted">No audits yet for this property.</p>'; return; }
+
+      const variants = (() => {
+        // Try to map property to likely audited URLs
+        if (siteParam && siteParam.startsWith('sc-domain:')) {
+          const d = siteParam.replace('sc-domain:','');
+          return [
+            `https://${d}/`,
+            `https://www.${d}/`,
+            `http://${d}/`,
+            `http://www.${d}/`
+          ];
+        }
+        return [siteParam];
+      })();
+
+      let rows = [];
+      for (const v of variants) {
+        try {
+          const r = await fetch(`/api/audit/history/${encodeURIComponent(v)}?limit=25`, { credentials:'include' });
+          const d = await r.json();
+          if (r.ok && d.success && Array.isArray(d.history)) {
+            rows = rows.concat(d.history);
+          }
+        } catch (_) { /* ignore */ }
+        if (rows.length > 0) break; // first hit wins
+      }
+
+      // Deduplicate by id
+      const unique = Object.values(rows.reduce((acc, a) => { acc[a.id]=a; return acc; }, {}));
+
+      if (unique.length === 0) { el.innerHTML = '<p class="muted">No audits yet for this property.</p>'; return; }
+      unique.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
       el.innerHTML = `<table class="history-table"><thead><tr><th>Date</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-        ${rows.map(a => `<tr>
+        ${unique.map(a => `<tr>
           <td>${new Date(a.createdAt).toLocaleString(undefined,{dateStyle:'short',timeStyle:'short'})}</td>
           <td>${a.hasResults ? 'Complete' : 'Pending'}</td>
           <td><a class="audit-btn" href="/report.html?auditId=${a.id}" target="_blank"><i class="fas fa-eye"></i> View</a></td>
@@ -136,6 +163,10 @@
       };
       applyBtn.addEventListener('click', loadAll);
       await loadAll();
+
+      // Initialize URL Inspection and Sitemaps panels
+      initPropUrlInspection();
+      initPropSitemaps();
     }
 
     document.addEventListener('DOMContentLoaded', initPropertyPage);
@@ -210,6 +241,27 @@
       </div>
       <div id="pInsights"></div>
       <div id="pPager" style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-search-location"></i> URL Inspection</h3>
+      <div class="controls">
+        <div style="flex:1">
+          <label class="muted">URL</label>
+          <input type="url" id="pInspectUrl" placeholder="https://example.com/page" style="width:100%;padding:.6rem;border:1px solid #e1e5e9;border-radius:6px">
+        </div>
+        <button id="pInspectBtn" class="audit-btn"><i class="fas fa-search"></i> Inspect</button>
+      </div>
+      <div id="pInspectOut" style="margin-top:.5rem"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-sitemap"></i> Sitemaps</h3>
+      <div class="controls">
+        <div style="flex:1"><input type="url" id="pSitemapUrl" placeholder="https://example.com/sitemap.xml" style="width:100%;padding:.6rem;border:1px solid #e1e5e9;border-radius:6px"></div>
+        <button id="pSitemapSubmit" class="audit-btn"><i class="fas fa-paper-plane"></i> Submit</button>
+      </div>
+      <div id="pSitemaps" style="margin-top:.5rem"></div>
     </div>
   </div>
 
@@ -288,6 +340,72 @@
       // default
       setActive('pages'); load();
     })();
+
+    // Property URL Inspection panel
+    function initPropUrlInspection(){
+      const input = document.getElementById('pInspectUrl');
+      const btn = document.getElementById('pInspectBtn');
+      const out = document.getElementById('pInspectOut');
+      if (!btn || !input || !out) return;
+      btn.addEventListener('click', async () => {
+        const url = (input.value||'').trim();
+        out.innerHTML = '';
+        if (!/^https?:\/\//i.test(url)) { out.innerHTML = '<p class="error">Enter a valid URL including http/https.</p>'; return; }
+        const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Inspecting...';
+        try {
+          const resp = await fetch('/api/gsc/url/inspect', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ url }) });
+          const data = await resp.json();
+          if (!resp.ok || !data.success) throw new Error(data.message || 'Inspection failed');
+          const r = data.result || {}; const idx = r.indexStatusResult || {}; const mobi = r.mobileUsabilityResult || {}; const amp = r.ampResult || {};
+          out.innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:.5rem">
+              <div class="card" style="padding:.75rem 1rem">
+                <div class="muted">Index Status</div>
+                <div><strong>Verdict:</strong> ${idx.verdict||'Unknown'}</div>
+                <div><strong>Coverage State:</strong> ${idx.coverageState||'Unknown'}</div>
+                <div><strong>Last Crawl:</strong> ${idx.lastCrawlTime||'—'}</div>
+                <div><strong>Robots:</strong> ${idx.robotsTxtState||'Unknown'}</div>
+                <div><strong>Noindex:</strong> ${idx.indexingState||'Unknown'}</div>
+                <div><strong>User Canonical:</strong> ${idx.userCanonical||'—'}</div>
+                <div><strong>Google Canonical:</strong> ${idx.googleCanonical||'—'}</div>
+              </div>
+              <div class="card" style="padding:.75rem 1rem">
+                <div class="muted">Mobile Usability</div>
+                <div><strong>Status:</strong> ${mobi.verdict||'Unknown'}</div>
+                <div><strong>Issues:</strong> ${(mobi.issues&&mobi.issues.length)?mobi.issues.map(i=>i.message).join(', '):'None'}</div>
+                <div style="margin-top:.5rem" class="muted">AMP: ${amp.verdict||'Unknown'}</div>
+              </div>
+            </div>`;
+        } catch(e){ out.innerHTML = `<p class="error">${e.message}</p>`; }
+        finally{ btn.disabled=false; btn.innerHTML = orig; }
+      });
+    }
+
+    // Property Sitemaps panel
+    function initPropSitemaps(){
+      const list = document.getElementById('pSitemaps');
+      const btn = document.getElementById('pSitemapSubmit');
+      const input = document.getElementById('pSitemapUrl');
+      if (!list || !btn || !input) return;
+      const render = (items)=>{
+        if (!items || items.length===0){ list.innerHTML = '<p class="muted">No sitemaps found for this property.</p>'; return; }
+        const rows = items.map(s=>`<tr><td>${s.path||s.url||''}</td><td>${s.isIndex?'Index':'File'}</td><td>${s.lastSubmitted||'—'}</td><td>${s.lastDownloaded||'—'}</td><td>${s.warnings||0}</td><td>${s.errors||0}</td></tr>`).join('');
+        list.innerHTML = `<table class="history-table"><thead><tr><th>Path</th><th>Type</th><th>Last Submitted</th><th>Last Downloaded</th><th>Warnings</th><th>Errors</th></tr></thead><tbody>${rows}</tbody></table>`;
+      };
+      const load = async ()=>{
+        list.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading…</p>';
+        try { const r = await fetch('/api/gsc/sitemaps', { credentials:'include' }); const d = await r.json(); if (!r.ok||!d.success) throw new Error(d.message||'Failed to load'); render(d.sitemaps); }
+        catch(e){ list.innerHTML = `<p class=\"error\">${e.message}</p>`; }
+      };
+      btn.addEventListener('click', async ()=>{
+        const url = (input.value||'').trim(); if (!/^https?:\/\//i.test(url)) { list.innerHTML = '<p class="error">Enter a valid sitemap URL.</p>'; return; }
+        const orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Submitting';
+        try{ const r = await fetch('/api/gsc/sitemaps/submit',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ sitemapUrl:url }) }); const d=await r.json(); if (!r.ok||!d.success) throw new Error(d.message||'Submit failed'); await load(); }
+        catch(e){ list.innerHTML = `<p class=\"error\">${e.message}</p>`; }
+        finally{ btn.disabled=false; btn.innerHTML=orig; }
+      });
+      load();
+    }
   </script>
 </body>
 </html>
