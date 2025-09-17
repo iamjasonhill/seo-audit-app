@@ -451,7 +451,19 @@ class SEOAuditor {
       // We always request with strategy=mobile above
       extra.strategy = 'mobile';
 
-      return this.formatPageSpeedResult(lighthouseResult, 'PageSpeed API', extra);
+      // Merge Lighthouse (lab) with CrUX (field) if available
+      const labResult = this.formatPageSpeedResult(lighthouseResult, 'PageSpeed API', extra);
+
+      try {
+        const field = await this.fetchCruxFieldVitals(this.siteUrl);
+        if (field) {
+          labResult.fieldVitals = field;
+        }
+      } catch (e) {
+        logger.warn('CrUX fetch failed:', e.message);
+      }
+
+      return labResult;
     } catch (error) {
       logger.error('PageSpeed API error:', error.message);
 
@@ -473,6 +485,60 @@ class SEOAuditor {
         throw new Error(`PageSpeed API error: ${error.message}`);
       }
     }
+  }
+
+  async fetchCruxFieldVitals(url) {
+    const key = process.env.GOOGLE_API_KEY;
+    if (!key) return null;
+
+    const endpoint = `https://chromeuxreport.googleapis.com/v1/records:query?key=${key}`;
+    const post = async (body, label) => {
+      try {
+        const res = await axios.post(endpoint, body, { timeout: 15000 });
+        return res.data;
+      } catch (e) {
+        const msg = e.response?.data?.error?.message || e.message;
+        logger.warn('CrUX request failed', { label, url: body.url || body.origin, message: msg });
+        return null;
+      }
+    };
+
+    const tryPage = async () => await post({ url, formFactor: 'PHONE' }, 'page');
+    const tryOrigin = async () => {
+      try {
+        const origin = new URL(url).origin;
+        return await post({ origin, formFactor: 'PHONE' }, 'origin');
+      } catch (e) {
+        logger.warn('CrUX origin parse failed', { url, message: e.message });
+        return null;
+      }
+    };
+
+    const pageRecord = await tryPage();
+    const record = pageRecord || await tryOrigin();
+    if (!record || !record.metrics) return null;
+
+    const m = record.metrics;
+    const getP75 = (k) => m[k]?.percentiles?.p75 ?? null;
+    const getDist = (k) => Array.isArray(m[k]?.histogram) ? m[k].histogram.map(b => ({ start: b.start ?? 0, end: b.end ?? null, density: b.density ?? 0 })) : [];
+
+    const lcpMs = getP75('largest_contentful_paint');
+    const cls = getP75('cumulative_layout_shift');
+    const inpMs = getP75('interaction_to_next_paint') ?? null;
+
+    const pass = (lcpMs != null && lcpMs <= 2500) && (inpMs != null ? inpMs <= 200 : true) && (cls != null && cls <= 0.1);
+
+    return {
+      formFactor: record.record?.key?.formFactor || 'PHONE',
+      collection: record.record?.collectionPeriod ? (record.record?.key?.url ? 'page' : 'origin') : (record.key?.url ? 'page' : 'origin'),
+      lcpP75Ms: lcpMs,
+      inpP75Ms: inpMs,
+      clsP75: cls,
+      lcpDist: getDist('largest_contentful_paint'),
+      inpDist: getDist('interaction_to_next_paint'),
+      clsDist: getDist('cumulative_layout_shift'),
+      passesCWV: pass
+    };
   }
 
   formatPageSpeedResult(lighthouseResult, source = 'PageSpeed API', extra = {}) {

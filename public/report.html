@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Report — Again Automations</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; color: #333; }
+        a { color: inherit; text-decoration: none; }
+        .nav { background: #fff; border-bottom: 1px solid #eaecef; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+        .nav .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #1a1f36; }
+        .nav .brand i { color: #667eea; }
+        .nav .links { display: flex; gap: 14px; }
+        .nav .links a { color: #4a5568; font-weight: 600; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 18px; }
+        .card { background: #fff; border: 1px solid #eaecef; border-radius: 10px; padding: 18px; margin: 18px 0; }
+        .tabs { display: flex; border-bottom: 1px solid #eaecef; margin-bottom: 12px; }
+        .tab { padding: 10px 14px; cursor: pointer; font-weight: 600; color: #4a5568; border-bottom: 2px solid transparent; }
+        .tab.active { color: #2d3748; border-bottom-color: #667eea; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .metric-card { background: #f8f9fa; border-radius: 10px; padding: 16px; margin-bottom: 14px; border-left: 4px solid #667eea; }
+        .metric-value { font-size: 1.8rem; font-weight: 700; color: #667eea; }
+        .status-badge { display: inline-block; padding: 4px 10px; border-radius: 14px; font-size: 12px; font-weight: 700; }
+        .status-good { background: #d4edda; color: #155724; }
+        .status-warning { background: #fff3cd; color: #856404; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        .error-message { background: #fee; color: #c33; padding: 0.75rem; border-radius: 5px; margin: 1rem 0; display: none; }
+        .loading { text-align: center; padding: 1.2rem; display: none; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; width: 28px; height: 28px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg);} }
+    </style>
+</head>
+<body>
+    <header class="nav">
+        <div class="brand"><i class="fas fa-bolt"></i> Again Automations</div>
+        <nav class="links">
+            <a href="/">Home</a>
+            <a href="/dashboard">Dashboard</a>
+            <a href="/login">Login</a>
+        </nav>
+    </header>
+
+    <main class="container">
+        <div id="error" class="error-message"></div>
+        <div id="loading" class="loading"><div class="spinner"></div><p>Loading report...</p></div>
+
+        <div class="card" id="auditHeader" style="display:none"></div>
+
+        <div class="card" id="results" style="display:none">
+            <div class="tabs">
+                <div class="tab active" data-tab="overview">Overview</div>
+                <div class="tab" data-tab="technical">Technical</div>
+                <div class="tab" data-tab="content">Content</div>
+                <div class="tab" data-tab="structure">Structure</div>
+                <div class="tab" data-tab="issues">Issues</div>
+            </div>
+            <div class="tab-content active" id="overview">
+                <div class="metric-card">
+                    <h3><i class="fas fa-tachometer-alt"></i> Page Speed</h3>
+                    <div class="metric-value" id="pageSpeed">-</div>
+                    <div class="status-badge" id="pageSpeedStatus">-</div>
+                </div>
+                <div class="metric-card">
+                    <h3><i class="fas fa-mobile-alt"></i> Mobile Score</h3>
+                    <div class="metric-value" id="mobileScore">-</div>
+                    <div class="status-badge" id="mobileStatus">-</div>
+                </div>
+                <div class="metric-card">
+                    <h3><i class="fas fa-shield-alt"></i> SEO Score</h3>
+                    <div class="metric-value" id="seoScore">-</div>
+                    <div class="status-badge" id="seoStatus">-</div>
+                </div>
+                <div class="metric-card">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Issues</h3>
+                    <div class="metric-value" id="issuesCount">-</div>
+                    <div class="status-badge" id="issuesStatus">-</div>
+                </div>
+            </div>
+            <div class="tab-content" id="technical"><div id="technicalDetails">Loading...</div></div>
+            <div class="tab-content" id="content"><div id="contentDetails">Loading...</div></div>
+            <div class="tab-content" id="structure"><div id="structureDetails">Loading...</div></div>
+            <div class="tab-content" id="issues"><ul class="issues-list" id="issuesList"><li>Loading...</li></ul></div>
+        </div>
+    </main>
+
+    <script>
+        class ReportPage {
+            constructor() {
+                this.results = document.getElementById('results');
+                this.loading = document.getElementById('loading');
+                this.error = document.getElementById('error');
+                this.initTabs();
+                this.loadAuditFromUrl();
+            }
+
+            initTabs() {
+                const tabs = document.querySelectorAll('.tab');
+                const contents = document.querySelectorAll('.tab-content');
+                tabs.forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        tabs.forEach(t => t.classList.remove('active'));
+                        contents.forEach(c => c.classList.remove('active'));
+                        tab.classList.add('active');
+                        const id = tab.getAttribute('data-tab');
+                        document.getElementById(id).classList.add('active');
+                    });
+                });
+            }
+
+            async loadAuditFromUrl() {
+                const params = new URLSearchParams(window.location.search);
+                const auditId = params.get('auditId');
+                if (!auditId) {
+                    this.showError('Missing auditId in URL.');
+                    return;
+                }
+                await this.loadExistingAudit(auditId);
+            }
+
+            async loadExistingAudit(auditId) {
+                this.showLoading(true);
+                try {
+                    const res = await fetch(`/api/audit/${auditId}`, { credentials: 'include' });
+                    if (res.status === 401 || res.status === 403) {
+                        this.showError('Please log in to view this report.');
+                        return;
+                    }
+                    if (!res.ok) throw new Error(`Failed to load audit: ${res.status}`);
+                    const data = await res.json();
+                    if (!data.success || !data.results) throw new Error('No results found');
+                    this.showAuditHeader(data.audit);
+                    this.showResults(data.results);
+                } catch (e) {
+                    this.showError(e.message || 'Failed to load report');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            showAuditHeader(audit) {
+                const header = document.getElementById('auditHeader');
+                const dt = audit?.createdAt ? new Date(audit.createdAt) : null;
+                const when = dt && !Number.isNaN(dt.getTime()) ? dt.toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}) : 'Unknown';
+                header.innerHTML = `
+                    <h3 style="margin:0 0 .5rem 0;color:#333"><i class="fas fa-chart-line"></i> Audit Report</h3>
+                    <p style="margin:0;color:#666"><strong>Site:</strong> ${audit.siteUrl} | <strong>Type:</strong> ${audit.siteType} | <strong>Date:</strong> ${when}</p>
+                `;
+                header.style.display = 'block';
+            }
+
+            showResults(data) {
+                this.results.style.display = 'block';
+                this.updateOverview(data);
+                this.updateTechnicalDetails(data.technical);
+                this.updateContentDetails(data.content);
+                this.updateStructureDetails(data.structure);
+                this.updateIssuesList(data.roadmap?.issues || []);
+            }
+
+            updateOverview(data) {
+                const pageSpeedPerformance = data.technical?.pageSpeed?.performance;
+                const pageSpeed = typeof pageSpeedPerformance === 'number' ? pageSpeedPerformance : (pageSpeedPerformance?.score ?? 0);
+                let mobileScore = 0;
+                if (data.technical?.mobileResponsive?.overallScore != null) {
+                    mobileScore = data.technical.mobileResponsive.overallScore;
+                } else if (data.technical?.pageSpeed?.mobileDiagnostics) {
+                    const md = data.technical.pageSpeed.mobileDiagnostics;
+                    const hasIssues = !!md.horizontalOverflow || (md.smallTapTargets?.count || 0) > 0 || (md.smallText?.count || 0) > 0;
+                    mobileScore = hasIssues ? 45 : 85;
+                }
+                const seoScore = data.technical?.pageSpeed?.seo?.score || 0;
+                const issuesCount = data.roadmap?.issues?.length || 0;
+
+                document.getElementById('pageSpeed').textContent = pageSpeed;
+                document.getElementById('mobileScore').textContent = mobileScore;
+                document.getElementById('seoScore').textContent = seoScore;
+                document.getElementById('issuesCount').textContent = issuesCount;
+                document.getElementById('pageSpeedStatus').textContent = this.getStatusText(pageSpeed);
+                document.getElementById('pageSpeedStatus').className = `status-badge ${this.getStatusClass(pageSpeed)}`;
+                document.getElementById('mobileStatus').textContent = this.getStatusText(mobileScore);
+                document.getElementById('mobileStatus').className = `status-badge ${this.getStatusClass(mobileScore)}`;
+                document.getElementById('seoStatus').textContent = this.getStatusText(seoScore);
+                document.getElementById('seoStatus').className = `status-badge ${this.getStatusClass(seoScore)}`;
+                document.getElementById('issuesStatus').textContent = issuesCount > 10 ? 'High' : issuesCount > 5 ? 'Medium' : 'Low';
+                document.getElementById('issuesStatus').className = `status-badge ${issuesCount > 10 ? 'status-error' : issuesCount > 5 ? 'status-warning' : 'status-good'}`;
+            }
+
+            updateTechnicalDetails(technical) {
+                const details = document.getElementById('technicalDetails');
+                if (!technical) { details.innerHTML = '<p>Technical analysis not available</p>'; return; }
+                let html = '<div class="grid">';
+                if (technical.pageSpeed) {
+                    if (technical.pageSpeed.error || technical.pageSpeed.fallback) {
+                        const isRateLimited = technical.pageSpeed.source === 'Rate Limited';
+                        const statusClass = isRateLimited ? 'status-error' : 'status-warning';
+                        const statusText = isRateLimited ? 'Rate Limited' : 'API Unavailable';
+                        html += `
+                            <div class="metric-card">
+                                <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
+                                <div class="metric-value ${statusClass}">${statusText}</div>
+                                <p><strong>Performance:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
+                                <p><strong>Accessibility:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
+                                <p><strong>Best Practices:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
+                                <p><strong>SEO:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
+                                <p><em>${technical.pageSpeed.error || 'Page Speed analysis temporarily unavailable'}</em></p>
+                            </div>
+                        `;
+                    } else {
+                        const pageSpeedPerformance = technical.pageSpeed.performance;
+                        const perfScore = typeof pageSpeedPerformance === 'number' ? pageSpeedPerformance : (pageSpeedPerformance?.score ?? 0);
+                        const accScore = technical.pageSpeed.accessibility?.score || 0;
+                        const bpScore = technical.pageSpeed.bestPractices?.score || 0;
+                        const seoScore = technical.pageSpeed.seo?.score || 0;
+                        const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
+                        html += `
+                            <div class="metric-card">
+                                <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
+                                <div class="metric-value ${perfClass}">${perfScore}/100</div>
+                                <p><strong>Performance:</strong> ${perfScore}/100</p>
+                                <p><strong>Accessibility:</strong> ${accScore}/100</p>
+                                <p><strong>Best Practices:</strong> ${bpScore}/100</p>
+                                <p><strong>SEO:</strong> ${seoScore}/100</p>
+                                ${technical.pageSpeed.performance?.metrics ? `
+                                    <hr>
+                                    <h5>Lab Core Web Vitals (Lighthouse)</h5>
+                                    <p><strong>LCP:</strong> ${technical.pageSpeed.performance.metrics.largestContentfulPaint || 'N/A'}</p>
+                                    <p><strong>CLS:</strong> ${technical.pageSpeed.performance.metrics.cumulativeLayoutShift || 'N/A'}</p>
+                                    <p><strong>FID:</strong> ${technical.pageSpeed.performance.metrics.firstInputDelay || 'N/A'}</p>
+                                    <p><strong>FCP:</strong> ${technical.pageSpeed.performance.metrics.firstContentfulPaint || 'N/A'}</p>
+                                    <p><strong>SI:</strong> ${technical.pageSpeed.performance.metrics.speedIndex || 'N/A'}</p>
+                                    <p><strong>TBT:</strong> ${technical.pageSpeed.performance.metrics.totalBlockingTime || 'N/A'}</p>
+                                    <p><strong>TTI:</strong> ${technical.pageSpeed.performance.metrics.timeToInteractive || 'N/A'}</p>
+                                ` : ''}
+                                ${technical.pageSpeed.fieldVitals ? `
+                                    <hr>
+                                    <h5>Field Core Web Vitals (CrUX)</h5>
+                                    <p><strong>Overall CWV:</strong> <span class="status-badge ${technical.pageSpeed.fieldVitals.overallPass ? 'status-good' : 'status-error'}">${technical.pageSpeed.fieldVitals.overallPass ? '✅ Pass' : '❌ Fail'}</span></p>
+                                    <p><strong>LCP (p75):</strong> ${technical.pageSpeed.fieldVitals.lcp || 'N/A'}</p>
+                                    <p><strong>INP (p75):</strong> ${technical.pageSpeed.fieldVitals.inp || 'N/A'}</p>
+                                    <p><strong>CLS (p75):</strong> ${technical.pageSpeed.fieldVitals.cls || 'N/A'}</p>
+                                    <details>
+                                        <summary>Distributions</summary>
+                                        <ul>
+                                            <li>LCP: Good ${technical.pageSpeed.fieldVitals.lcpGood}% | NI ${technical.pageSpeed.fieldVitals.lcpNI}% | Poor ${technical.pageSpeed.fieldVitals.lcpPoor}%</li>
+                                            <li>INP: Good ${technical.pageSpeed.fieldVitals.inpGood}% | NI ${technical.pageSpeed.fieldVitals.inpNI}% | Poor ${technical.pageSpeed.fieldVitals.inpPoor}%</li>
+                                            <li>CLS: Good ${technical.pageSpeed.fieldVitals.clsGood}% | NI ${technical.pageSpeed.fieldVitals.clsNI}% | Poor ${technical.pageSpeed.fieldVitals.clsPoor}%</li>
+                                        </ul>
+                                    </details>
+                                ` : ''}
+                                ${technical.pageSpeed.source ? `<p><small>Source: ${technical.pageSpeed.source}</small></p>` : ''}
+                            </div>
+                        `;
+                    }
+                }
+                if (technical.https) {
+                    const securityScore = technical.https.securityScore || 0;
+                    const maxScore = technical.https.maxSecurityScore || 6;
+                    const securityClass = securityScore >= 5 ? 'status-good' : securityScore >= 3 ? 'status-warning' : 'status-error';
+                    html += `
+                        <div class="metric-card">
+                            <h4><i class="fas fa-shield-alt"></i> Security Analysis</h4>
+                            <div class="metric-value ${securityClass}">${securityScore}/${maxScore}</div>
+                            <p><strong>HTTPS:</strong> ${technical.https.isHTTPS ? '✅ Enabled' : '❌ Not Enabled'}</p>
+                            <p><strong>Status Code:</strong> ${technical.https.statusCode}</p>
+                            <p><strong>Security Headers:</strong> ${securityScore}/${maxScore}</p>
+                            ${technical.https.mixedContent && technical.https.mixedContent.hasMixedContent ? `
+                                <p class="status-error"><strong>⚠️ Mixed Content:</strong> ${technical.https.mixedContent.total || ''} HTTP resources detected</p>
+                            ` : '<p class="status-good"><strong>✅ No Mixed Content</strong></p>'}
+                            <hr>
+                            <h5>Security Headers</h5>
+                            <ul>
+                                <li>HSTS: ${technical.https.securityHeaders?.strictTransportSecurity ? '✅' : '❌'}</li>
+                                <li>X-Frame-Options: ${technical.https.securityHeaders?.xFrameOptions ? '✅' : '❌'}</li>
+                                <li>X-Content-Type-Options: ${technical.https.securityHeaders?.xContentTypeOptions ? '✅' : '❌'}</li>
+                                <li>CSP: ${technical.https.securityHeaders?.contentSecurityPolicy ? '✅' : '❌'}</li>
+                                <li>Referrer-Policy: ${technical.https.securityHeaders?.referrerPolicy ? '✅' : '❌'}</li>
+                                <li>Permissions-Policy: ${technical.https.securityHeaders?.permissionsPolicy ? '✅' : '❌'}</li>
+                            </ul>
+                            ${technical.https.missingHeaders && technical.https.missingHeaders.length ? `
+                                <hr>
+                                <h5>Remediation Tips</h5>
+                                <ul>${technical.https.remediationTips.map(t => `<li>${t}</li>`).join('')}</ul>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+                // Mobile Responsiveness (primary path)
+                if (technical.mobileResponsive && !technical.mobileResponsive.error) {
+                    const mobileScore = technical.mobileResponsive.overallScore || 0;
+                    const mobileClass = mobileScore >= 80 ? 'status-good' : mobileScore >= 60 ? 'status-warning' : 'status-error';
+                    html += `
+                        <div class="metric-card">
+                            <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness</h4>
+                            <div class="metric-value ${mobileClass}">${mobileScore}/100</div>
+                            <p><strong>Mobile Friendly:</strong> ${technical.mobileResponsive.isMobileFriendly ? '✅ Yes' : '❌ No'}</p>
+                            <p><strong>Viewport Meta:</strong> ${technical.mobileResponsive.hasViewportMeta ? '✅ Present' : '❌ Missing'}</p>
+                            <p><strong>Touch Targets:</strong> ${technical.mobileResponsive.mobile?.touchTargets || 0}</p>
+                            <p><strong>Readable Text:</strong> ${technical.mobileResponsive.mobile?.readableTextElements || 0} elements</p>
+                            ${technical.mobileResponsive.mobile?.hasHorizontalScroll ? 
+                                '<p class="status-error"><strong>⚠️ Horizontal Scroll:</strong> Content overflows on mobile</p>' : 
+                                '<p class="status-good"><strong>✅ No Horizontal Scroll</strong></p>'
+                            }
+                            ${technical.mobileResponsive.recommendations && technical.mobileResponsive.recommendations.length > 0 ? `
+                                <hr>
+                                <h5>Recommendations</h5>
+                                <ul>
+                                    ${technical.mobileResponsive.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                                </ul>
+                            ` : ''}
+                        </div>
+                    `;
+                } else if (technical.pageSpeed && technical.pageSpeed.mobileDiagnostics) {
+                    const md = technical.pageSpeed.mobileDiagnostics;
+                    const fallbackScore = (md.fallbackScore != null) ? md.fallbackScore : ((md.smallTapTargets?.count||0) + (md.smallText?.count||0) + (md.horizontalOverflow?1:0) > 0 ? 45 : 85);
+                    const mobileClass = fallbackScore >= 80 ? 'status-good' : fallbackScore >= 60 ? 'status-warning' : 'status-error';
+                    html += `
+                        <div class="metric-card">
+                            <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness (PSI)</h4>
+                            <div class="metric-value ${mobileClass}">${fallbackScore}/100</div>
+                            <p><strong>Horizontal Overflow:</strong> ${md.horizontalOverflow ? '⚠️ Yes' : '✅ No'}</p>
+                            <p><strong>Small Tap Targets:</strong> ${md.smallTapTargets?.count || 0}</p>
+                            <p><strong>Small Text Blocks:</strong> ${md.smallText?.count || 0}</p>
+                            <p><strong>Viewport Meta:</strong> ${md.viewport?.hasMeta ? '✅ Present' : '❌ Missing'}${md.viewport?.warning ? ` — ${md.viewport.warning}` : ''}</p>
+                        </div>
+                    `;
+                }
+                // Structured Data / Schema Markup
+                if (technical.schemaMarkup && !technical.schemaMarkup.error) {
+                    const schemaScore = technical.schemaMarkup.totalStructuredData || 0;
+                    const schemaClass = schemaScore >= 3 ? 'status-good' : schemaScore >= 1 ? 'status-warning' : 'status-error';
+                    html += `
+                        <div class=\"metric-card\">
+                            <h4><i class=\"fas fa-code\"></i> Structured Data</h4>
+                            <div class=\"metric-value ${schemaClass}\">${schemaScore}</div>
+                            <p><strong>Schema Types:</strong> ${technical.schemaMarkup.schemaTypes?.length || 0}</p>
+                            <p><strong>Open Graph:</strong> ${technical.schemaMarkup.openGraphTags || 0} tags</p>
+                            <p><strong>Twitter Cards:</strong> ${technical.schemaMarkup.twitterTags || 0} tags</p>
+                            <p><strong>Microdata:</strong> ${technical.schemaMarkup.microdataElements?.length || 0} elements</p>
+                            ${technical.schemaMarkup.recommendations && technical.schemaMarkup.recommendations.length > 0 ? `
+                                <hr>
+                                <h5>Recommendations</h5>
+                                <ul>
+                                    ${technical.schemaMarkup.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                                </ul>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+                details.innerHTML = html + '</div>';
+            }
+
+            updateContentDetails(content) {
+                const details = document.getElementById('contentDetails');
+                if (!content) { details.innerHTML = '<p>Content analysis not available</p>'; return; }
+                let html = '<div class="grid">';
+                if (content.wordCount) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Content Length</h4>
+                            <p><strong>Word Count:</strong> ${content.wordCount.totalWords}</p>
+                            <p><strong>Substantial Content:</strong> ${content.wordCount.isSubstantial ? 'Yes' : 'No'}</p>
+                        </div>
+                    `;
+                }
+                if (content.readability) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Readability</h4>
+                            <p><strong>Score:</strong> ${content.readability.readabilityScore}</p>
+                            <p><strong>Level:</strong> ${content.readability.readabilityLevel}</p>
+                            <p><strong>Avg Words/Sentence:</strong> ${content.readability.avgWordsPerSentence}</p>
+                        </div>
+                    `;
+                }
+                html += '</div>';
+                details.innerHTML = html;
+            }
+
+            updateStructureDetails(structure) {
+                const details = document.getElementById('structureDetails');
+                if (!structure) { details.innerHTML = '<p>Structure analysis not available</p>'; return; }
+                let html = '<div class="grid">';
+                if (structure.navigation) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Navigation</h4>
+                            <p><strong>Navigation Links:</strong> ${structure.navigation.linkCount}</p>
+                            <p><strong>Has Main Navigation:</strong> ${structure.navigation.hasMainNavigation ? 'Yes' : 'No'}</p>
+                        </div>
+                    `;
+                }
+                if (structure.internalLinking) {
+                    html += `
+                        <div class="metric-card">
+                            <h4>Internal Linking</h4>
+                            <p><strong>Internal Links:</strong> ${structure.internalLinking.internalLinkCount}</p>
+                            <p><strong>External Links:</strong> ${structure.internalLinking.externalLinkCount}</p>
+                        </div>
+                    `;
+                }
+                html += '</div>';
+                details.innerHTML = html;
+            }
+
+            updateIssuesList(issues) {
+                const list = document.getElementById('issuesList');
+                if (!issues || issues.length === 0) { list.innerHTML = '<li>No issues found.</li>'; return; }
+                list.innerHTML = issues.map(issue => `
+                    <li class="issue-item ${issue.priority?.toLowerCase?.() || 'low'}">
+                        <div class="issue-priority">${issue.priority}</div>
+                        <h4>${issue.issue}</h4>
+                        <p>${issue.description}</p>
+                        <small><strong>Effort:</strong> ${issue.effort} | <strong>Impact:</strong> ${issue.impact}</small>
+                    </li>
+                `).join('');
+            }
+
+            getStatusText(score) { if (score >= 80) return 'Good'; if (score >= 60) return 'Fair'; return 'Poor'; }
+            getStatusClass(score) { if (score >= 80) return 'status-good'; if (score >= 60) return 'status-warning'; return 'status-error'; }
+
+            showLoading(show) { this.loading.style.display = show ? 'block' : 'none'; }
+            showError(msg) { this.error.textContent = msg; this.error.style.display = 'block'; }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => new ReportPage());
+    </script>
+</body>
+</html>
+

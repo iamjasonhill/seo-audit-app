@@ -3,1114 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>SEO Audit App - Comprehensive Website Analysis</title>
+    <title>Again Automations — SEO Audit & Search Insights</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #222; background: #f7f8fb; }
+        a { color: inherit; text-decoration: none; }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 40px;
-        }
-
-        .header h1 {
-            font-size: 3rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .header p {
-            font-size: 1.2rem;
-            opacity: 0.9;
-        }
-
-        .main-card {
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 40px;
-            margin-bottom: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 25px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #555;
-        }
-
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 12px 15px;
-            border: 2px solid #e1e5e9;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s ease;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .btn {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-        }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 40px;
-        }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .results {
-            display: none;
-            margin-top: 30px;
-        }
-
-        .results h2 {
-            color: #333;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #667eea;
-            padding-bottom: 10px;
-        }
-
-        .metric-card {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            border-left: 4px solid #667eea;
-        }
-
-        .metric-card h3 {
-            color: #333;
-            margin-bottom: 10px;
-        }
-
-        .metric-value {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .issues-list {
-            list-style: none;
-        }
-
-        .issue-item {
-            background: white;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-left: 4px solid #dc3545;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .issue-item.high {
-            border-left-color: #dc3545;
-        }
-
-        .issue-item.medium {
-            border-left-color: #ffc107;
-        }
-
-        .issue-item.low {
-            border-left-color: #28a745;
-        }
-
-        .issue-priority {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .priority-high {
-            background: #dc3545;
-            color: white;
-        }
-
-        .priority-medium {
-            background: #ffc107;
-            color: #333;
-        }
-
-        .priority-low {
-            background: #28a745;
-            color: white;
-        }
-
-        .tabs {
+        .nav {
+            background: #ffffff;
+            border-bottom: 1px solid #eaecef;
+            padding: 14px 20px;
             display: flex;
-            border-bottom: 2px solid #e1e5e9;
-            margin-bottom: 20px;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
+        .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: #1a1f36; }
+        .brand i { color: #667eea; }
+        .nav-links { display: flex; gap: 16px; }
+        .nav-links a { color: #4a5568; font-weight: 600; }
+        .nav-links a:hover { color: #2d3748; }
 
-        .tab {
-            padding: 15px 25px;
-            cursor: pointer;
-            border-bottom: 3px solid transparent;
-            transition: all 0.3s ease;
-        }
+        .hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; padding: 70px 20px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .hero h1 { font-size: 2.5rem; line-height: 1.2; margin-bottom: 12px; }
+        .hero p { font-size: 1.1rem; opacity: 0.95; }
+        .cta-row { margin-top: 22px; display: flex; gap: 12px; }
+        .btn { display: inline-flex; align-items: center; gap: 8px; border: none; border-radius: 8px; padding: 12px 18px; cursor: pointer; font-weight: 700; }
+        .btn-primary { background: #ffffff; color: #4c51bf; }
+        .btn-primary:hover { background: #f0f1f8; }
+        .btn-ghost { background: rgba(255,255,255,0.18); color: #fff; }
+        .btn-ghost:hover { background: rgba(255,255,255,0.28); }
 
-        .tab.active {
-            border-bottom-color: #667eea;
-            color: #667eea;
-            font-weight: 600;
-        }
+        .features { padding: 40px 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-top: 22px; }
+        .card { background: #fff; border: 1px solid #eaecef; border-radius: 10px; padding: 18px; }
+        .card h3 { color: #1a202c; margin-bottom: 6px; }
+        .muted { color: #4a5568; }
 
-        .tab-content {
-            display: none;
-        }
+        .footer { margin-top: 40px; padding: 20px; background: #ffffff; border-top: 1px solid #eaecef; font-size: 0.95rem; }
+        .footer-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .footer-links { display: flex; gap: 14px; }
+        .footer a { color: #4a5568; }
+        .footer a:hover { color: #2d3748; }
 
-        .tab-content.active {
-            display: block;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #e1e5e9;
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            transition: width 0.3s ease;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
-
-        .status-good {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status-warning {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .status-error {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .feature-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 20px;
-            margin-top: 30px;
-        }
-
-        .feature-card {
-            background: white;
-            border-radius: 10px;
-            padding: 25px;
-            text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-        }
-
-        .feature-card:hover {
-            transform: translateY(-5px);
-        }
-
-        .feature-icon {
-            font-size: 3rem;
-            color: #667eea;
-            margin-bottom: 15px;
-        }
-
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-            border-left: 4px solid #dc3545;
-        }
-
-        .success-message {
-            background: #d4edda;
-            color: #155724;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-            border-left: 4px solid #28a745;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-
-            .header h1 {
-                font-size: 2rem;
-            }
-
-            .main-card {
-                padding: 20px;
-            }
-
-            .tabs {
-                flex-wrap: wrap;
-            }
-
-            .tab {
-                flex: 1;
-                text-align: center;
-            }
+        @media (max-width: 640px) {
+            .hero { padding: 52px 16px; }
+            .hero h1 { font-size: 1.9rem; }
+            .cta-row { flex-direction: column; }
         }
     </style>
+    <meta name="robots" content="index,follow">
+    <meta name="description" content="Again Automations provides SEO audit and search insights with Lighthouse, PSI, and CrUX. Secure dashboard and historical reporting.">
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1><i class="fas fa-search"></i> SEO Audit App</h1>
-            <p>Comprehensive website analysis for technical SEO, content optimization, and competitive insights</p>
+    <header class="nav">
+        <div class="brand">
+            <i class="fas fa-bolt"></i>
+            <span>Again Automations</span>
         </div>
+        <nav class="nav-links">
+            <a href="/">Home</a>
+            <a href="/login">Login</a>
+        </nav>
+    </header>
 
-        <div class="main-card">
-            <form id="auditForm">
-                <div class="form-group">
-                    <label for="siteUrl">
-                        <i class="fas fa-globe"></i> Website URL
-                    </label>
-                    <input 
-                        type="url" 
-                        id="siteUrl" 
-                        name="siteUrl" 
-                        placeholder="https://example.com" 
-                        required
-                    >
-                </div>
-
-                <div class="form-group">
-                    <label for="siteType">
-                        <i class="fas fa-tag"></i> Site Type
-                    </label>
-                    <select id="siteType" name="siteType">
-                        <option value="Generic">Generic Website</option>
-                        <option value="SaaS">SaaS Application</option>
-                        <option value="Ecommerce">E-commerce Store</option>
-                        <option value="Agency">Marketing Agency</option>
-                        <option value="Local">Local Business</option>
-                    </select>
-                </div>
-
-                <button type="submit" class="btn" id="auditBtn">
-                    <i class="fas fa-play"></i> Start SEO Audit
-                </button>
-            </form>
-
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Analyzing your website... This may take a few minutes.</p>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progressFill" style="width: 0%"></div>
-                </div>
+    <section class="hero">
+        <div class="container">
+            <h1>SEO Audits and Search Insights for Faster, Healthier Sites</h1>
+            <p>Run comprehensive audits powered by Lighthouse and PageSpeed Insights, merge with field data from CrUX, and track improvements over time in a secure dashboard.</p>
+            <div class="cta-row">
+                <a class="btn btn-primary" href="/login"><i class="fas fa-user-shield"></i> Sign in</a>
+                <a class="btn btn-ghost" href="https://again.com.au/contact/"><i class="fas fa-envelope"></i> Contact us</a>
             </div>
+        </div>
+    </section>
 
-            <div class="results" id="results">
-                <h2><i class="fas fa-chart-line"></i> Audit Results</h2>
-                
-                <div class="tabs">
-                    <div class="tab active" data-tab="overview">Overview</div>
-                    <div class="tab" data-tab="technical">Technical</div>
-                    <div class="tab" data-tab="content">Content</div>
-                    <div class="tab" data-tab="structure">Structure</div>
-                    <div class="tab" data-tab="issues">Issues</div>
+    <section class="features">
+        <div class="container">
+            <div class="grid">
+                <div class="card">
+                    <h3><i class="fas fa-tachometer-alt"></i> Page Speed & Core Web Vitals</h3>
+                    <p class="muted">Actionable metrics across Performance, Accessibility, Best Practices, and SEO, with lab and field Web Vitals.</p>
                 </div>
-
-                <div class="tab-content active" id="overview">
-                    <div class="feature-grid">
-                        <div class="metric-card">
-                            <h3><i class="fas fa-tachometer-alt"></i> Page Speed</h3>
-                            <div class="metric-value" id="pageSpeed">-</div>
-                            <div class="status-badge" id="pageSpeedStatus">-</div>
-                        </div>
-                        <div class="metric-card">
-                            <h3><i class="fas fa-mobile-alt"></i> Mobile Score</h3>
-                            <div class="metric-value" id="mobileScore">-</div>
-                            <div class="status-badge" id="mobileStatus">-</div>
-                        </div>
-                        <div class="metric-card">
-                            <h3><i class="fas fa-shield-alt"></i> SEO Score</h3>
-                            <div class="metric-value" id="seoScore">-</div>
-                            <div class="status-badge" id="seoStatus">-</div>
-                        </div>
-                        <div class="metric-card">
-                            <h3><i class="fas fa-exclamation-triangle"></i> Issues Found</h3>
-                            <div class="metric-value" id="issuesCount">-</div>
-                            <div class="status-badge" id="issuesStatus">-</div>
-                        </div>
-                    </div>
+                <div class="card">
+                    <h3><i class="fas fa-mobile-alt"></i> Mobile Diagnostics</h3>
+                    <p class="muted">Surface layout shifts, small tap targets, text issues, and horizontal overflow with clear guidance.</p>
                 </div>
-
-                <div class="tab-content" id="technical">
-                    <div class="metric-card">
-                        <h3>Technical Health Analysis</h3>
-                        <div id="technicalDetails">Loading technical analysis...</div>
-                    </div>
+                <div class="card">
+                    <h3><i class="fas fa-shield-alt"></i> Security & HTTPS</h3>
+                    <p class="muted">Detect missing headers, mixed content, and HTTPS misconfigurations with remediation tips.</p>
                 </div>
-
-                <div class="tab-content" id="content">
-                    <div class="metric-card">
-                        <h3>Content Quality Analysis</h3>
-                        <div id="contentDetails">Loading content analysis...</div>
-                    </div>
-                </div>
-
-                <div class="tab-content" id="structure">
-                    <div class="metric-card">
-                        <h3>Site Structure Analysis</h3>
-                        <div id="structureDetails">Loading structure analysis...</div>
-                    </div>
-                </div>
-
-                <div class="tab-content" id="issues">
-                    <div class="metric-card">
-                        <h3>Issues & Recommendations</h3>
-                        <ul class="issues-list" id="issuesList">
-                            <li>Loading issues...</li>
-                        </ul>
-                    </div>
+                <div class="card">
+                    <h3><i class="fas fa-history"></i> Audit History</h3>
+                    <p class="muted">Track results over time and share links to stored audits from your dashboard.</p>
                 </div>
             </div>
         </div>
+    </section>
 
-        <div class="feature-grid">
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-cogs"></i>
-                </div>
-                <h3>Technical SEO</h3>
-                <p>Comprehensive analysis of page speed, mobile optimization, HTTPS, and technical health</p>
+    <footer class="footer">
+        <div class="container footer-row">
+            <div>
+                © <span id="year"></span> Again Automations
             </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-file-alt"></i>
-                </div>
-                <h3>Content Analysis</h3>
-                <p>Evaluate content quality, keyword optimization, and content gaps</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-sitemap"></i>
-                </div>
-                <h3>Site Structure</h3>
-                <p>Analyze navigation, internal linking, and site architecture</p>
-            </div>
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-chart-bar"></i>
-                </div>
-                <h3>Competitive Insights</h3>
-                <p>Benchmark against competitors and identify opportunities</p>
+            <div class="footer-links">
+                <a href="https://again.com.au/">again.com.au</a>
+                <a href="https://again.com.au/privacy/">Privacy</a>
+                <a href="https://again.com.au/terms/">Terms</a>
             </div>
         </div>
-    </div>
+    </footer>
 
     <script>
-        class SEOAuditApp {
-            constructor() {
-                this.form = document.getElementById('auditForm');
-                this.loading = document.getElementById('loading');
-                this.results = document.getElementById('results');
-                this.auditBtn = document.getElementById('auditBtn');
-                this.progressFill = document.getElementById('progressFill');
-                
-                console.log('SEOAuditApp initialized', {
-                    form: !!this.form,
-                    loading: !!this.loading,
-                    results: !!this.results,
-                    auditBtn: !!this.auditBtn,
-                    progressFill: !!this.progressFill
-                });
-                
-                this.init();
-                this.checkAuthStatus();
-                this.loadAuditFromUrl();
-            }
-
-            async init() {
-                if (!this.form) {
-                    console.error('Form not found!');
-                    return;
-                }
-                this.form.addEventListener('submit', (e) => this.handleSubmit(e));
-                this.initTabs();
-                console.log('Event listeners attached');
-            }
-
-            async checkAuthStatus() {
-                try {
-                    const response = await fetch('/api/auth/status', {
-                        credentials: 'include'
-                    });
-                    const data = await response.json();
-                    
-                    if (!data.authenticated) {
-                        window.location.href = '/login';
-                        return;
-                    }
-                } catch (error) {
-                    window.location.href = '/login';
-                }
-            }
-
-            async loadAuditFromUrl() {
-                const urlParams = new URLSearchParams(window.location.search);
-                const auditId = urlParams.get('auditId');
-                
-                if (auditId) {
-                    console.log('Loading audit from URL:', auditId);
-                    console.log('Current URL:', window.location.href);
-                    console.log('Cookies:', document.cookie);
-                    await this.loadExistingAudit(auditId);
-                }
-            }
-
-            async loadExistingAudit(auditId) {
-                let response;
-                try {
-                    this.showLoading(true);
-                    this.hideResults();
-                    
-                    response = await fetch(`/api/audit/${auditId}`, {
-                        credentials: 'include'
-                    });
-                    
-                    if (response.status === 401 || response.status === 403) {
-                        // User not authenticated, redirect to login
-                        this.showError('Please log in to view audit results. Redirecting to login...');
-                        setTimeout(() => {
-                            window.location.href = '/login';
-                        }, 2000);
-                        return;
-                    }
-                    
-                    if (!response.ok) {
-                        throw new Error(`Failed to load audit: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    
-                    if (data.success && data.results) {
-                        console.log('Loaded audit results:', data);
-                        this.showAuditHeader(data.audit);
-                        this.showResults(data.results);
-                    } else {
-                        throw new Error('No results found');
-                    }
-                } catch (error) {
-                    console.error('Error loading audit:', error);
-                    console.error('Response status:', response?.status);
-                    console.error('Response headers:', response?.headers);
-                    
-                    if (error.message.includes('401') || error.message.includes('403')) {
-                        this.showError('Please log in to view audit results. Redirecting to login...');
-                        setTimeout(() => {
-                            window.location.href = '/login';
-                        }, 2000);
-                    } else {
-                        this.showError(`Failed to load audit results: ${error.message}. Please try again.`);
-                    }
-                } finally {
-                    this.showLoading(false);
-                }
-            }
-
-            showAuditHeader(audit) {
-                // Create or update audit header
-                let headerDiv = document.getElementById('auditHeader');
-                if (!headerDiv) {
-                    headerDiv = document.createElement('div');
-                    headerDiv.id = 'auditHeader';
-                    headerDiv.style.cssText = 'background: #f8f9fa; padding: 1rem; margin: 1rem 0; border-radius: 5px; border-left: 4px solid #667eea;';
-                    this.form.parentNode.insertBefore(headerDiv, this.form.nextSibling);
-                }
-                
-                const auditDate = audit?.createdAt ? new Date(audit.createdAt) : null;
-                const auditDateTime = auditDate && !Number.isNaN(auditDate.getTime())
-                    ? auditDate.toLocaleString(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short'
-                    })
-                    : 'Unknown';
-                headerDiv.innerHTML = `
-                    <h3 style="margin: 0 0 0.5rem 0; color: #333;">
-                        <i class="fas fa-chart-line"></i> Viewing Audit Results
-                    </h3>
-                    <p style="margin: 0; color: #666;">
-                        <strong>Site:</strong> ${audit.siteUrl} |
-                        <strong>Type:</strong> ${audit.siteType} |
-                        <strong>Date &amp; Time:</strong> ${auditDateTime}
-                    </p>
-                `;
-                headerDiv.style.display = 'block';
-            }
-
-            initTabs() {
-                const tabs = document.querySelectorAll('.tab');
-                const tabContents = document.querySelectorAll('.tab-content');
-
-                tabs.forEach(tab => {
-                    tab.addEventListener('click', () => {
-                        // Remove active class from all tabs and contents
-                        tabs.forEach(t => t.classList.remove('active'));
-                        tabContents.forEach(tc => tc.classList.remove('active'));
-
-                        // Add active class to clicked tab and corresponding content
-                        tab.classList.add('active');
-                        const tabId = tab.getAttribute('data-tab');
-                        document.getElementById(tabId).classList.add('active');
-                    });
-                });
-            }
-
-            async handleSubmit(e) {
-                e.preventDefault();
-                console.log('Form submitted!'); // Debug log
-                
-                const formData = new FormData(this.form);
-                const auditData = {
-                    siteUrl: formData.get('siteUrl'),
-                    siteType: formData.get('siteType')
-                };
-
-                console.log('Audit data:', auditData); // Debug log
-                this.showLoading();
-                this.simulateProgress();
-
-                try {
-                    const response = await fetch('/api/audit', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(auditData)
-                    });
-
-                    const result = await response.json();
-
-                    if (response.ok) {
-                        this.showResults(result.results);
-                        this.showMessage('SEO audit completed successfully!', 'success');
-                    } else {
-                        throw new Error(result.message || 'Audit failed');
-                    }
-                } catch (error) {
-                    this.showMessage(`Error: ${error.message}`, 'error');
-                } finally {
-                    this.hideLoading();
-                }
-            }
-
-            showLoading(show = true) {
-                if (show) {
-                    this.loading.style.display = 'block';
-                    this.results.style.display = 'none';
-                    this.auditBtn.disabled = true;
-                    this.auditBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
-                } else {
-                    this.hideLoading();
-                }
-            }
-
-            hideLoading() {
-                this.loading.style.display = 'none';
-                this.auditBtn.disabled = false;
-                this.auditBtn.innerHTML = '<i class="fas fa-play"></i> Start SEO Audit';
-            }
-
-            hideResults() {
-                this.results.style.display = 'none';
-            }
-
-            showError(message) {
-                // Create or update error message
-                let errorDiv = document.getElementById('errorMessage');
-                if (!errorDiv) {
-                    errorDiv = document.createElement('div');
-                    errorDiv.id = 'errorMessage';
-                    errorDiv.className = 'error-message';
-                    errorDiv.style.cssText = 'background: #fee; color: #c33; padding: 1rem; margin: 1rem 0; border-radius: 5px; display: block;';
-                    this.form.parentNode.insertBefore(errorDiv, this.form.nextSibling);
-                }
-                errorDiv.textContent = message;
-                errorDiv.style.display = 'block';
-            }
-
-            simulateProgress() {
-                let progress = 0;
-                const interval = setInterval(() => {
-                    progress += Math.random() * 15;
-                    if (progress > 90) progress = 90;
-                    this.progressFill.style.width = progress + '%';
-                    
-                    if (progress >= 90) {
-                        clearInterval(interval);
-                    }
-                }, 500);
-            }
-
-            showResults(data) {
-                this.results.style.display = 'block';
-                this.updateOverview(data);
-                this.updateTechnicalDetails(data.technical);
-                this.updateContentDetails(data.content);
-                this.updateStructureDetails(data.structure);
-                this.updateIssuesList(data.roadmap?.issues || []);
-            }
-
-            updateOverview(data) {
-                // Update metrics
-                const pageSpeedPerformance = data.technical?.pageSpeed?.performance;
-                const pageSpeed = typeof pageSpeedPerformance === 'number'
-                    ? pageSpeedPerformance
-                    : pageSpeedPerformance?.score ?? 0;
-                // Prefer explicit overallScore; else derive a coarse score from PSI diagnostics
-                let mobileScore = 0;
-                if (data.technical?.mobileResponsive?.overallScore != null) {
-                    mobileScore = data.technical.mobileResponsive.overallScore;
-                } else if (data.technical?.pageSpeed?.mobileDiagnostics) {
-                    const md = data.technical.pageSpeed.mobileDiagnostics;
-                    const hasIssues = !!md.horizontalOverflow || (md.smallTapTargets?.count || 0) > 0 || (md.smallText?.count || 0) > 0;
-                    mobileScore = hasIssues ? 45 : 85;
-                } else {
-                    mobileScore = 0;
-                }
-                const seoScore = data.technical?.pageSpeed?.seo?.score || 0;
-                const issuesCount = data.roadmap?.issues?.length || 0;
-
-                document.getElementById('pageSpeed').textContent = pageSpeed;
-                document.getElementById('mobileScore').textContent = mobileScore;
-                document.getElementById('seoScore').textContent = seoScore;
-                document.getElementById('issuesCount').textContent = issuesCount;
-
-                // Update status badges
-                document.getElementById('pageSpeedStatus').textContent = this.getStatusText(pageSpeed);
-                document.getElementById('pageSpeedStatus').className = `status-badge ${this.getStatusClass(pageSpeed)}`;
-
-                document.getElementById('mobileStatus').textContent = this.getStatusText(mobileScore);
-                document.getElementById('mobileStatus').className = `status-badge ${this.getStatusClass(mobileScore)}`;
-
-                document.getElementById('seoStatus').textContent = this.getStatusText(seoScore);
-                document.getElementById('seoStatus').className = `status-badge ${this.getStatusClass(seoScore)}`;
-
-                document.getElementById('issuesStatus').textContent = issuesCount > 10 ? 'High' : issuesCount > 5 ? 'Medium' : 'Low';
-                document.getElementById('issuesStatus').className = `status-badge ${issuesCount > 10 ? 'status-error' : issuesCount > 5 ? 'status-warning' : 'status-good'}`;
-            }
-
-            updateTechnicalDetails(technical) {
-                const details = document.getElementById('technicalDetails');
-                if (!technical) {
-                    details.innerHTML = '<p>Technical analysis not available</p>';
-                    return;
-                }
-
-                let html = '<div class="feature-grid">';
-                
-                // Page Speed Analysis
-                if (technical.pageSpeed) {
-                    // Handle error/fallback response
-                    if (technical.pageSpeed.error || technical.pageSpeed.fallback) {
-                        const isRateLimited = technical.pageSpeed.source === 'Rate Limited';
-                        const statusClass = isRateLimited ? 'status-error' : 'status-warning';
-                        const statusText = isRateLimited ? 'Rate Limited' : 'API Unavailable';
-                        
-                        html += `
-                            <div class="metric-card">
-                                <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
-                                <div class="metric-value ${statusClass}">${statusText}</div>
-                                <p><strong>Performance:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
-                                <p><strong>Accessibility:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
-                                <p><strong>Best Practices:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
-                                <p><strong>SEO:</strong> ${isRateLimited ? 'Rate limited' : 'API unavailable'}</p>
-                                <p><em>${technical.pageSpeed.error || 'Page Speed analysis temporarily unavailable'}</em></p>
-                            </div>
-                        `;
-                    } else {
-                        // Handle normal Lighthouse/API response
-                        const pageSpeedPerformance = technical.pageSpeed.performance;
-                        const perfScore = typeof pageSpeedPerformance === 'number'
-                            ? pageSpeedPerformance
-                            : pageSpeedPerformance?.score ?? 0;
-                        const accScore = technical.pageSpeed.accessibility?.score || 0;
-                        const bpScore = technical.pageSpeed.bestPractices?.score || 0;
-                        const seoScore = technical.pageSpeed.seo?.score || 0;
-                        
-                        // Debug logging
-                        console.log('PageSpeed scores:', {
-                            performance: perfScore,
-                            accessibility: accScore,
-                            bestPractices: bpScore,
-                            seo: seoScore,
-                            rawData: technical.pageSpeed
-                        });
-                        
-                        const perfClass = perfScore >= 90 ? 'status-good' : perfScore >= 50 ? 'status-warning' : 'status-error';
-                        
-                        html += `
-                            <div class="metric-card">
-                                <h4><i class="fas fa-tachometer-alt"></i> Page Speed Insights</h4>
-                                <div class="metric-value ${perfClass}">${perfScore}/100</div>
-                                <p><strong>Performance:</strong> ${perfScore}/100</p>
-                                <p><strong>Accessibility:</strong> ${accScore}/100</p>
-                                <p><strong>Best Practices:</strong> ${bpScore}/100</p>
-                                <p><strong>SEO:</strong> ${seoScore}/100</p>
-                                ${technical.pageSpeed.performance?.metrics ? `
-                                    <hr>
-                                    <h5>Core Web Vitals</h5>
-                                    <p><strong>LCP:</strong> ${technical.pageSpeed.performance.metrics.largestContentfulPaint || 'N/A'}</p>
-                                    <p><strong>CLS:</strong> ${technical.pageSpeed.performance.metrics.cumulativeLayoutShift || 'N/A'}</p>
-                                    <p><strong>FID:</strong> ${technical.pageSpeed.performance.metrics.firstInputDelay || 'N/A'}</p>
-                                    <p><strong>FCP:</strong> ${technical.pageSpeed.performance.metrics.firstContentfulPaint || 'N/A'}</p>
-                                    <p><strong>SI:</strong> ${technical.pageSpeed.performance.metrics.speedIndex || 'N/A'}</p>
-                                    <p><strong>TBT:</strong> ${technical.pageSpeed.performance.metrics.totalBlockingTime || 'N/A'}</p>
-                                    <p><strong>TTI:</strong> ${technical.pageSpeed.performance.metrics.timeToInteractive || 'N/A'}</p>
-                                ` : ''}
-                                ${technical.pageSpeed.source ? `<p><small>Source: ${technical.pageSpeed.source}</small></p>` : ''}
-                            </div>
-                        `;
-                    }
-                } else if (technical.pageSpeed && technical.pageSpeed.error) {
-                    html += `
-                        <div class="metric-card">
-                            <h4><i class="fas fa-exclamation-triangle"></i> Page Speed Analysis</h4>
-                            <p class="status-error">Error: ${technical.pageSpeed.error}</p>
-                            <p>Lighthouse analysis failed. This may be due to site accessibility or configuration issues.</p>
-                        </div>
-                    `;
-                }
-
-                // HTTPS & Security Analysis
-                if (technical.https) {
-                    const securityScore = technical.https.securityScore || 0;
-                    const maxScore = technical.https.maxSecurityScore || 6;
-                    const securityClass = securityScore >= 5 ? 'status-good' : securityScore >= 3 ? 'status-warning' : 'status-error';
-                    
-                    html += `
-                        <div class="metric-card">
-                            <h4><i class="fas fa-shield-alt"></i> Security Analysis</h4>
-                            <div class="metric-value ${securityClass}">${securityScore}/${maxScore}</div>
-                            <p><strong>HTTPS:</strong> ${technical.https.isHTTPS ? '✅ Enabled' : '❌ Not Enabled'}</p>
-                            <p><strong>Status Code:</strong> ${technical.https.statusCode}</p>
-                            <p><strong>Security Headers:</strong> ${securityScore}/${maxScore}</p>
-                            ${technical.https.mixedContent && technical.https.mixedContent.hasMixedContent ? `
-                                <p class="status-error"><strong>⚠️ Mixed Content:</strong> ${technical.https.mixedContent.total || ''} HTTP resources detected</p>
-                                ${technical.https.mixedContent.samples && technical.https.mixedContent.samples.length ? `
-                                    <details style="margin-top: .5rem">
-                                        <summary>View examples</summary>
-                                        <ul>
-                                            ${technical.https.mixedContent.samples.slice(0,5).map(s => `<li>[${s.type}] ${s.url}</li>`).join('')}
-                                        </ul>
-                                        <p><small>Fix by serving these over HTTPS or updating references.</small></p>
-                                    </details>
-                                ` : ''}
-                            ` : 
-                                '<p class="status-good"><strong>✅ No Mixed Content</strong></p>'
-                            }
-                            <hr>
-                            <h5>Security Headers</h5>
-                            <ul>
-                                <li>HSTS: ${technical.https.securityHeaders?.strictTransportSecurity ? '✅' : '❌'}</li>
-                                <li>X-Frame-Options: ${technical.https.securityHeaders?.xFrameOptions ? '✅' : '❌'}</li>
-                                <li>X-Content-Type-Options: ${technical.https.securityHeaders?.xContentTypeOptions ? '✅' : '❌'}</li>
-                                <li>CSP: ${technical.https.securityHeaders?.contentSecurityPolicy ? '✅' : '❌'}</li>
-                                <li>Referrer-Policy: ${technical.https.securityHeaders?.referrerPolicy ? '✅' : '❌'}</li>
-                                <li>Permissions-Policy: ${technical.https.securityHeaders?.permissionsPolicy ? '✅' : '❌'}</li>
-                            </ul>
-                            ${technical.https.missingHeaders && technical.https.missingHeaders.length ? `
-                                <hr>
-                                <h5>Remediation Tips</h5>
-                                <ul>
-                                    ${technical.https.remediationTips.map(t => `<li>${t}</li>`).join('')}
-                                </ul>
-                            ` : ''}
-                        </div>
-                    `;
-                }
-
-                // Mobile Responsiveness (primary path)
-                if (technical.mobileResponsive && !technical.mobileResponsive.error) {
-                    // Handle normal response
-                    const mobileScore = technical.mobileResponsive.overallScore || 0;
-                    const mobileClass = mobileScore >= 80 ? 'status-good' : mobileScore >= 60 ? 'status-warning' : 'status-error';
-                    
-                    html += `
-                        <div class="metric-card">
-                            <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness</h4>
-                            <div class="metric-value ${mobileClass}">${mobileScore}/100</div>
-                            <p><strong>Mobile Friendly:</strong> ${technical.mobileResponsive.isMobileFriendly ? '✅ Yes' : '❌ No'}</p>
-                            <p><strong>Viewport Meta:</strong> ${technical.mobileResponsive.hasViewportMeta ? '✅ Present' : '❌ Missing'}</p>
-                            <p><strong>Touch Targets:</strong> ${technical.mobileResponsive.mobile?.touchTargets || 0}</p>
-                            <p><strong>Readable Text:</strong> ${technical.mobileResponsive.mobile?.readableTextElements || 0} elements</p>
-                            ${technical.mobileResponsive.mobile?.hasHorizontalScroll ? 
-                                '<p class="status-error"><strong>⚠️ Horizontal Scroll:</strong> Content overflows on mobile</p>' : 
-                                '<p class="status-good"><strong>✅ No Horizontal Scroll</strong></p>'
-                            }
-                            ${technical.mobileResponsive.recommendations && technical.mobileResponsive.recommendations.length > 0 ? `
-                                <hr>
-                                <h5>Recommendations</h5>
-                                <ul>
-                                    ${technical.mobileResponsive.recommendations.map(rec => `<li>${rec}</li>`).join('')}
-                                </ul>
-                            ` : ''}
-                        </div>
-                    `;
-                } else if (technical.pageSpeed && technical.pageSpeed.mobileDiagnostics) {
-                    // Fallback render using PSI diagnostics when Puppeteer path failed or older audits lack mobileResponsive
-                    const md = technical.pageSpeed.mobileDiagnostics;
-                    const fallbackScore = (md.fallbackScore != null) ? md.fallbackScore : ((md.smallTapTargets?.count||0) + (md.smallText?.count||0) + (md.horizontalOverflow?1:0) > 0 ? 45 : 85);
-                    const mobileClass = fallbackScore >= 80 ? 'status-good' : fallbackScore >= 60 ? 'status-warning' : 'status-error';
-                    html += `
-                        <div class="metric-card">
-                            <h4><i class="fas fa-mobile-alt"></i> Mobile Responsiveness (PSI)</h4>
-                            <div class="metric-value ${mobileClass}">${fallbackScore}/100</div>
-                            <p><strong>Horizontal Overflow:</strong> ${md.horizontalOverflow ? '⚠️ Yes' : '✅ No'}</p>
-                            <p><strong>Small Tap Targets:</strong> ${md.smallTapTargets?.count || 0}</p>
-                            <p><strong>Small Text Blocks:</strong> ${md.smallText?.count || 0}</p>
-                            <p><strong>Viewport Meta:</strong> ${md.viewport?.hasMeta ? '✅ Present' : '❌ Missing'}${md.viewport?.warning ? ` — ${md.viewport.warning}` : ''}</p>
-                            ${md.overflowSamples && md.overflowSamples.length ? `
-                                <details style="margin-top:.5rem">
-                                    <summary>Overflow examples</summary>
-                                    <ul>${md.overflowSamples.slice(0,5).map(i => `<li>${(i.selector||i.snippet||'element')}</li>`).join('')}</ul>
-                                </details>
-                            ` : ''}
-                        </div>
-                    `;
-                }
-
-                // Schema Markup
-                if (technical.schemaMarkup && !technical.schemaMarkup.error) {
-                    const schemaScore = technical.schemaMarkup.totalStructuredData || 0;
-                    const schemaClass = schemaScore >= 3 ? 'status-good' : schemaScore >= 1 ? 'status-warning' : 'status-error';
-                    
-                    html += `
-                        <div class="metric-card">
-                            <h4><i class="fas fa-code"></i> Structured Data</h4>
-                            <div class="metric-value ${schemaClass}">${schemaScore}</div>
-                            <p><strong>Schema Types:</strong> ${technical.schemaMarkup.schemaTypes?.length || 0}</p>
-                            <p><strong>Open Graph:</strong> ${technical.schemaMarkup.openGraphTags || 0} tags</p>
-                            <p><strong>Twitter Cards:</strong> ${technical.schemaMarkup.twitterTags || 0} tags</p>
-                            <p><strong>Microdata:</strong> ${technical.schemaMarkup.microdataElements?.length || 0} elements</p>
-                            ${technical.schemaMarkup.recommendations && technical.schemaMarkup.recommendations.length > 0 ? `
-                                <hr>
-                                <h5>Recommendations</h5>
-                                <ul>
-                                    ${technical.schemaMarkup.recommendations.map(rec => `<li>${rec}</li>`).join('')}
-                                </ul>
-                            ` : ''}
-                        </div>
-                    `;
-                }
-
-                html += '</div>';
-                details.innerHTML = html;
-            }
-
-            updateContentDetails(content) {
-                const details = document.getElementById('contentDetails');
-                if (!content) {
-                    details.innerHTML = '<p>Content analysis not available</p>';
-                    return;
-                }
-
-                let html = '<div class="feature-grid">';
-                
-                if (content.wordCount) {
-                    html += `
-                        <div class="metric-card">
-                            <h4>Content Length</h4>
-                            <p><strong>Word Count:</strong> ${content.wordCount.totalWords}</p>
-                            <p><strong>Substantial Content:</strong> ${content.wordCount.isSubstantial ? 'Yes' : 'No'}</p>
-                        </div>
-                    `;
-                }
-
-                if (content.readability) {
-                    html += `
-                        <div class="metric-card">
-                            <h4>Readability</h4>
-                            <p><strong>Score:</strong> ${content.readability.readabilityScore}</p>
-                            <p><strong>Level:</strong> ${content.readability.readabilityLevel}</p>
-                            <p><strong>Avg Words/Sentence:</strong> ${content.readability.avgWordsPerSentence}</p>
-                        </div>
-                    `;
-                }
-
-                html += '</div>';
-                details.innerHTML = html;
-            }
-
-            updateStructureDetails(structure) {
-                const details = document.getElementById('structureDetails');
-                if (!structure) {
-                    details.innerHTML = '<p>Structure analysis not available</p>';
-                    return;
-                }
-
-                let html = '<div class="feature-grid">';
-                
-                if (structure.navigation) {
-                    html += `
-                        <div class="metric-card">
-                            <h4>Navigation</h4>
-                            <p><strong>Navigation Links:</strong> ${structure.navigation.linkCount}</p>
-                            <p><strong>Has Main Navigation:</strong> ${structure.navigation.hasMainNavigation ? 'Yes' : 'No'}</p>
-                        </div>
-                    `;
-                }
-
-                if (structure.internalLinking) {
-                    html += `
-                        <div class="metric-card">
-                            <h4>Internal Linking</h4>
-                            <p><strong>Internal Links:</strong> ${structure.internalLinking.internalLinkCount}</p>
-                            <p><strong>External Links:</strong> ${structure.internalLinking.externalLinkCount}</p>
-                        </div>
-                    `;
-                }
-
-                html += '</div>';
-                details.innerHTML = html;
-            }
-
-            updateIssuesList(issues) {
-                const issuesList = document.getElementById('issuesList');
-                
-                if (!issues || issues.length === 0) {
-                    issuesList.innerHTML = '<li class="issue-item">No issues found! Your site is in great shape.</li>';
-                    return;
-                }
-
-                let html = '';
-                issues.forEach(issue => {
-                    html += `
-                        <li class="issue-item ${issue.priority.toLowerCase()}">
-                            <div class="issue-priority priority-${issue.priority.toLowerCase()}">${issue.priority}</div>
-                            <h4>${issue.issue}</h4>
-                            <p>${issue.description}</p>
-                            <small><strong>Effort:</strong> ${issue.effort} | <strong>Impact:</strong> ${issue.impact}</small>
-                        </li>
-                    `;
-                });
-
-                issuesList.innerHTML = html;
-            }
-
-            getStatusText(score) {
-                if (score >= 80) return 'Good';
-                if (score >= 60) return 'Fair';
-                return 'Poor';
-            }
-
-            getStatusClass(score) {
-                if (score >= 80) return 'status-good';
-                if (score >= 60) return 'status-warning';
-                return 'status-error';
-            }
-
-            showMessage(message, type) {
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `${type}-message`;
-                messageDiv.textContent = message;
-                
-                const container = document.querySelector('.main-card');
-                container.insertBefore(messageDiv, container.firstChild);
-                
-                setTimeout(() => {
-                    messageDiv.remove();
-                }, 5000);
-            }
-        }
-
-        // Initialize the app when DOM is loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            new SEOAuditApp();
-        });
+        document.getElementById('year').textContent = new Date().getFullYear();
     </script>
 </body>
 </html>
+
