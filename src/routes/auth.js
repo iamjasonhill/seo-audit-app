@@ -1,14 +1,14 @@
 const express = require('express');
 const Joi = require('joi');
-const { login, logout, redirectIfAuthenticated } = require('../middleware/auth');
+const { login, logout, redirectIfAuthenticated, requireAuth, users } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
-// Validation schema for login
+// Validation schema for login (basic hardening)
 const loginSchema = Joi.object({
-  username: Joi.string().required(),
-  password: Joi.string().required()
+  username: Joi.string().min(3).max(64).required(),
+  password: Joi.string().min(8).max(128).required()
 });
 
 // POST /api/auth/login - Login endpoint
@@ -116,6 +116,54 @@ router.get('/status', (req, res, next) => {
     res.json({
       authenticated: false
     });
+  }
+});
+
+// POST /api/auth/change-password - Authenticated password change
+router.post('/change-password', requireAuth, async (req, res) => {
+  try {
+    const schema = Joi.object({
+      currentPassword: Joi.string().required(),
+      newPassword: Joi.string().min(12).max(128).required()
+    });
+
+    const { error, value } = schema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: 'Validation Error', message: error.details[0].message });
+    }
+
+    // Ensure new password is different from current
+    if (value.newPassword === value.currentPassword) {
+      return res.status(400).json({ error: 'Validation Error', message: 'New password must be different from current password' });
+    }
+
+    // Granular password policy checks for better messages
+    const policyErrors = [];
+    if (!/[a-z]/.test(value.newPassword)) policyErrors.push('add a lowercase letter');
+    if (!/[A-Z]/.test(value.newPassword)) policyErrors.push('add an uppercase letter');
+    if (!/\d/.test(value.newPassword)) policyErrors.push('add a number');
+    if (!/[^A-Za-z0-9]/.test(value.newPassword)) policyErrors.push('add a symbol');
+    if (value.newPassword.length < 12) policyErrors.push('use at least 12 characters');
+    if (policyErrors.length) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: `Password requirements not met: ${policyErrors.join(', ')}`
+      });
+    }
+
+    const bcrypt = require('bcryptjs');
+    const user = users.find(u => u.id === req.user.id);
+    if (!user) return res.status(404).json({ error: 'Not Found', message: 'User not found' });
+
+    const ok = await bcrypt.compare(value.currentPassword, user.password);
+    if (!ok) return res.status(401).json({ error: 'Unauthorized', message: 'Current password is incorrect' });
+
+    const newHash = await bcrypt.hash(value.newPassword, 12);
+    user.password = newHash;
+
+    return res.json({ success: true, message: 'Password updated successfully' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server Error', message: 'Failed to update password' });
   }
 });
 

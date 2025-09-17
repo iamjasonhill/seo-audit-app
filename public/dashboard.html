@@ -62,6 +62,11 @@
             margin: 2rem auto;
             padding: 0 2rem;
         }
+        .settings { margin-top: 2rem; }
+        .settings .form { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .settings .form .full { grid-column: 1 / -1; }
+        .settings .form input { padding: 0.6rem; border: 2px solid #e1e5e9; border-radius: 6px; }
+        .settings .form button { margin-top: 0.5rem; }
 
         .dashboard-grid {
             display: grid;
@@ -339,6 +344,43 @@
                 </div>
             </div>
         </div>
+
+        <div class="card settings">
+            <h2><i class="fas fa-user-cog"></i> Account Settings</h2>
+            <div class="error-message" id="pwdError"></div>
+            <div class="success-message" id="pwdSuccess"></div>
+            <form id="changePasswordForm" class="form" autocomplete="off">
+                <div style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden;">
+                    <input type="text" tabindex="-1" aria-hidden="true" autocomplete="username">
+                    <input type="password" tabindex="-1" aria-hidden="true" autocomplete="current-password">
+                </div>
+                <div>
+                    <label for="currentPassword">Current Password</label>
+                    <div style="display:flex;gap:.5rem;align-items:center">
+                        <input type="password" id="currentPassword" name="currentPassword" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required style="flex:1">
+                        <button type="button" class="view-toggle" data-target="currentPassword" title="Show/Hide" style="padding:.5rem 0.6rem;border:1px solid #e1e5e9;border-radius:6px;background:#fff"><i class="fas fa-eye"></i></button>
+                    </div>
+                </div>
+                <div></div>
+                <div>
+                    <label for="newPassword">New Password</label>
+                    <div style="display:flex;gap:.5rem;align-items:center">
+                        <input type="password" id="newPassword" name="newPassword" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" required placeholder="Min 12 chars, upper/lower/number/symbol" style="flex:1">
+                        <button type="button" class="view-toggle" data-target="newPassword" title="Show/Hide" style="padding:.5rem 0.6rem;border:1px solid #e1e5e9;border-radius:6px;background:#fff"><i class="fas fa-eye"></i></button>
+                    </div>
+                </div>
+                <div>
+                    <label for="confirmPassword">Confirm New Password</label>
+                    <div style="display:flex;gap:.5rem;align-items:center">
+                        <input type="password" id="confirmPassword" name="confirmPassword" autocomplete="new-password" autocapitalize="none" autocorrect="off" spellcheck="false" required style="flex:1">
+                        <button type="button" class="view-toggle" data-target="confirmPassword" title="Show/Hide" style="padding:.5rem 0.6rem;border:1px solid #e1e5e9;border-radius:6px;background:#fff"><i class="fas fa-eye"></i></button>
+                    </div>
+                </div>
+                <div class="full">
+                    <button type="submit" class="audit-btn" id="changePwdBtn" style="width:auto"><i class="fas fa-key"></i> Change Password</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script>
@@ -352,12 +394,32 @@
                 this.errorMessage = document.getElementById('errorMessage');
                 this.successMessage = document.getElementById('successMessage');
                 this.auditHistory = document.getElementById('auditHistory');
+                this.changePasswordForm = document.getElementById('changePasswordForm');
+                this.changePwdBtn = document.getElementById('changePwdBtn');
+                this.pwdError = document.getElementById('pwdError');
+                this.pwdSuccess = document.getElementById('pwdSuccess');
+                document.querySelectorAll('.view-toggle').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const id = btn.getAttribute('data-target');
+                        const input = document.getElementById(id);
+                        const showing = input.type === 'text';
+                        input.type = showing ? 'password' : 'text';
+                        btn.innerHTML = showing ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
+                    });
+                });
                 
                 this.auditForm.addEventListener('submit', this.handleAuditSubmit.bind(this));
                 this.quickTestBtn.addEventListener('click', this.handleQuickTest.bind(this));
                 this.logoutBtn.addEventListener('click', this.handleLogout.bind(this));
+                this.changePasswordForm.addEventListener('submit', this.handleChangePassword.bind(this));
                 
                 this.init();
+
+                // Clear any autofilled values shortly after load
+                setTimeout(() => {
+                    const ids = ['currentPassword','newPassword','confirmPassword'];
+                    ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+                }, 60);
             }
 
             async init() {
@@ -604,6 +666,47 @@
                     }
                 } catch (error) {
                     console.error('Logout error:', error);
+                }
+            }
+
+            async handleChangePassword(e) {
+                e.preventDefault();
+                const currentPassword = document.getElementById('currentPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+
+                this.pwdError.style.display = 'none';
+                this.pwdSuccess.style.display = 'none';
+
+                if (newPassword !== confirmPassword) {
+                    this.pwdError.textContent = 'New passwords do not match';
+                    this.pwdError.style.display = 'block';
+                    return;
+                }
+
+                this.changePwdBtn.disabled = true;
+                const original = this.changePwdBtn.innerHTML;
+                this.changePwdBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+                try {
+                    const res = await fetch('/api/auth/change-password', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ currentPassword, newPassword })
+                    });
+                    const data = await res.json();
+                    if (!res.ok || !data.success) {
+                        throw new Error(data.message || 'Failed to change password');
+                    }
+                    this.pwdSuccess.textContent = 'Password changed successfully';
+                    this.pwdSuccess.style.display = 'block';
+                    this.changePasswordForm.reset();
+                } catch (err) {
+                    this.pwdError.textContent = err.message;
+                    this.pwdError.style.display = 'block';
+                } finally {
+                    this.changePwdBtn.disabled = false;
+                    this.changePwdBtn.innerHTML = original;
                 }
             }
 
