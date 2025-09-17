@@ -16,6 +16,7 @@ const databaseService = require('./src/services/database');
 const auditRoutes = require('./src/routes/audit');
 const reportRoutes = require('./src/routes/reports');
 const authRoutes = require('./src/routes/auth');
+const authGoogleRoutes = require('./src/routes/auth_google');
 const gscRoutes = require('./src/routes/gsc');
 
 const app = express();
@@ -56,6 +57,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/auth/google', authGoogleRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/gsc', gscRoutes);

@@ -165,6 +165,9 @@
             <button type="submit" class="login-btn" id="loginBtn">
                 <i class="fas fa-sign-in-alt"></i> Sign In
             </button>
+            <div style="margin-top:.5rem;text-align:center">
+                <button type="button" class="login-btn" id="googleBtn" style="background:#db4437"><i class="fab fa-google"></i> Sign in with Google</button>
+            </div>
         </form>
 
         <div class="loading" id="loading">
@@ -186,6 +189,7 @@
                 this.errorMessage = document.getElementById('errorMessage');
                 
                 this.form.addEventListener('submit', this.handleSubmit.bind(this));
+                document.getElementById('googleBtn').addEventListener('click', this.handleGoogle.bind(this));
                 
                 // Check if already authenticated
                 this.checkAuthStatus();
@@ -247,6 +251,16 @@
             showError(message) {
                 this.errorMessage.textContent = message;
                 this.errorMessage.style.display = 'block';
+            }
+            async handleGoogle() {
+                try {
+                    const r = await fetch('/api/auth/google/connect', { credentials: 'include' });
+                    const d = await r.json();
+                    if (!r.ok || !d.success || !d.authUrl) throw new Error(d.message || 'Failed to init Google login');
+                    window.location.href = d.authUrl;
+                } catch (e) {
+                    this.showError(e.message);
+                }
             }
 
             hideError() {
