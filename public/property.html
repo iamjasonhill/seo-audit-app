@@ -150,6 +150,15 @@
       const site = qs('site');
       if (!site) { document.getElementById('err').textContent = 'Missing site parameter'; return; }
       document.getElementById('siteLabel').textContent = site;
+      // Set GSC link
+      const gscLink = document.getElementById('openGsc');
+      if (gscLink) {
+        // GSC property URLs: domain properties use sc-domain:, URL-prefix properties use the encoded URL
+        const target = site.startsWith('sc-domain:')
+          ? `https://search.google.com/search-console?resource_id=${encodeURIComponent(site)}`
+          : `https://search.google.com/search-console?resource_id=${encodeURIComponent(site)}`;
+        gscLink.href = target;
+      }
       await ensureSelectedProperty(site);
 
       // New Audit form
@@ -214,6 +223,7 @@
     <div class="h1"><i class="fas fa-globe"></i> Property <span class="muted">—</span> <span id="siteLabel" class="muted"></span></div>
     <div>
       <a href="/dashboard" class="audit-btn" style="background:#6c757d"><i class="fas fa-arrow-left"></i> Dashboard</a>
+      <a id="openGsc" href="#" class="audit-btn" style="margin-left:.5rem;background:#198754" target="_blank"><i class="fab fa-google"></i> Open in GSC</a>
     </div>
   </div>
   <div class="container">
