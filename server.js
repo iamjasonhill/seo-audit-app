@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const logger = require('./src/utils/logger');
 const rateLimiter = require('./src/middleware/rateLimiter');
+const gscRateLimiter = require('./src/middleware/gscRateLimiter');
 const errorHandler = require('./src/middleware/errorHandler');
 const databaseService = require('./src/services/database');
 
@@ -60,7 +61,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/auth/google', authGoogleRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reports', reportRoutes);
-app.use('/api/gsc', gscRoutes);
+app.use('/api/gsc', gscRateLimiter, gscRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

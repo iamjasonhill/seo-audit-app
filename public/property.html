@@ -286,6 +286,7 @@
       </div>
       <div id="pInsights"></div>
       <div id="pPager" style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center"></div>
+      <div id="pOpps" style="margin-top:1rem"></div>
     </div>
 
     <div class="card">
@@ -346,7 +347,7 @@
         return `${endpoint}?${params.toString()}`;
       };
 
-      const render = (rows) => {
+      const render = (rows, prevMap) => {
         if (!rows || rows.length === 0) { out.innerHTML = '<p class="muted">No data for selected range.</p>'; pager.innerHTML=''; return; }
         const label = tab==='pages'?'Page':tab==='queries'?'Query':tab==='device'?'Device':tab==='country'?'Country':'Appearance';
         const firstVal = (r)=> tab==='pages'?r.page: tab==='queries'?r.query: tab==='device'?r.device: tab==='country'?r.country: r.appearance;
@@ -360,6 +361,42 @@
         const prev = byId('pgPrev2'); const next = byId('pgNext2');
         if (prev) prev.onclick = ()=>{ if (startRow>0){ startRow=Math.max(0,startRow-rowLimit); load(); }};
         if (next) next.onclick = ()=>{ startRow += rowLimit; load(); };
+
+        // Opportunities
+        const opps = document.getElementById('pOpps');
+        const lowCtr = rows.filter(r => (r.impressions||0) > 1000 && (r.ctr||0) < 0.01)
+                           .sort((a,b)=> (b.impressions||0) - (a.impressions||0)).slice(0,5);
+        const nearP1 = rows.filter(r => (r.impressions||0) > 500 && (r.position||0) >= 8 && (r.position||0) <= 15)
+                           .sort((a,b)=> (a.position||0) - (b.position||0)).slice(0,5);
+        // Rising/Falling by clicks – needs previous map if available
+        const rising = []; const falling = [];
+        if (prevMap) {
+          rows.forEach(r=>{ const k = firstVal(r)||''; const p = prevMap[k]||{}; const dv = (r.clicks||0) - (p.clicks||0); if (dv>0) rising.push({k, dv}); if (dv<0) falling.push({k, dv}); });
+          rising.sort((a,b)=> b.dv - a.dv); falling.sort((a,b)=> a.dv - b.dv);
+        }
+        const list = (arr, fmt) => arr.length ? `<ul>${arr.map(fmt).join('')}</ul>` : '<p class="muted">None</p>';
+        opps.innerHTML = `
+          <div class="card" style="padding:.75rem 1rem">
+            <div style="font-weight:600;margin-bottom:.5rem">Opportunities</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+              <div>
+                <div class="muted">Low CTR</div>
+                ${list(lowCtr, r=>`<li>${firstVal(r)||''} – CTR ${(((r.ctr||0)*100)||0).toFixed(2)}%, Impr ${(r.impressions||0).toLocaleString()}</li>`)}
+              </div>
+              <div>
+                <div class="muted">Near Page One</div>
+                ${list(nearP1, r=>`<li>${firstVal(r)||''} – Pos ${((r.position||0)||0).toFixed(1)}, Impr ${(r.impressions||0).toLocaleString()}</li>`)}
+              </div>
+              <div>
+                <div class="muted">Rising (Clicks)</div>
+                ${list(rising.slice(0,5), x=>`<li>${x.k} – +${x.dv.toLocaleString()}</li>`)}
+              </div>
+              <div>
+                <div class="muted">Falling (Clicks)</div>
+                ${list(falling.slice(0,5), x=>`<li>${x.k} – ${x.dv.toLocaleString()}</li>`)}
+              </div>
+            </div>
+          </div>`;
       };
 
       async function load(){
@@ -368,7 +405,27 @@
           const r = await fetch(buildUrl(), { credentials:'include' });
           const d = await r.json();
           if (!r.ok || !d.success) throw new Error(d.message||'Failed to load');
-          render(d.data);
+          // Fetch previous period for rising/falling
+          let prevMap = null;
+          try {
+            const s = new Date(startEl.value); const e = new Date(endEl.value);
+            const days = Math.max(1, Math.round((e - s)/(24*60*60*1000))+1);
+            const pe = new Date(s.getTime() - 24*60*60*1000);
+            const ps = new Date(pe.getTime() - (days-1)*24*60*60*1000);
+            const iso = (d)=>d.toISOString().slice(0,10);
+            const params = new URLSearchParams();
+            params.append('startDate', iso(ps)); params.append('endDate', iso(pe));
+            params.append('searchType', typeEl.value);
+            params.append('rowLimit', String(rowLimit));
+            params.append('startRow', String(startRow));
+            const r2 = await fetch(`${endpoint}?${params.toString()}`, { credentials:'include' });
+            const d2 = await r2.json();
+            if (r2.ok && d2.success) {
+              const key = (row)=> tab==='pages'?row.page: tab==='queries'?row.query: tab==='device'?row.device: tab==='country'?row.country: row.appearance;
+              prevMap = (d2.data||[]).reduce((acc,row)=>{ acc[key(row)||''] = row; return acc; }, {});
+            }
+          } catch(_) {}
+          render(d.data, prevMap);
         } catch(e){ out.innerHTML = `<p class="error">${e.message}</p>`; pager.innerHTML=''; }
       }
 
