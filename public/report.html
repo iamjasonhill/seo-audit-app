@@ -31,6 +31,10 @@
         .loading { text-align: center; padding: 1.2rem; display: none; }
         .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #667eea; border-radius: 50%; width: 28px; height: 28px; animation: spin 1s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { 0% { transform: rotate(0deg);} 100% { transform: rotate(360deg);} }
+        .delta { margin-top: 6px; font-size: .95rem; font-weight: 600; }
+        .delta-up { color: #1e7e34; }
+        .delta-down { color: #b21f2d; }
+        .delta-flat { color: #6c757d; font-weight: 500; }
     </style>
 </head>
 <body>
@@ -154,6 +158,7 @@
             showResults(data) {
                 this.results.style.display = 'block';
                 this.updateOverview(data);
+                this.renderComparisons();
                 this.updateTechnicalDetails(data.technical);
                 this.updateContentDetails(data.content);
                 this.updateStructureDetails(data.structure);
@@ -186,6 +191,76 @@
                 document.getElementById('seoStatus').className = `status-badge ${this.getStatusClass(seoScore)}`;
                 document.getElementById('issuesStatus').textContent = issuesCount > 10 ? 'High' : issuesCount > 5 ? 'Medium' : 'Low';
                 document.getElementById('issuesStatus').className = `status-badge ${issuesCount > 10 ? 'status-error' : issuesCount > 5 ? 'status-warning' : 'status-good'}`;
+            }
+
+            async renderComparisons() {
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    const auditId = params.get('auditId');
+                    if (!auditId) return;
+                    // Load this audit to get siteUrl
+                    const currentResp = await fetch(`/api/audit/${auditId}`, { credentials: 'include' });
+                    const currentData = await currentResp.json();
+                    const siteUrl = currentData?.audit?.siteUrl;
+                    if (!siteUrl) return;
+                    // Get last two audits for this site
+                    const historyResp = await fetch(`/api/audit/history/${encodeURIComponent(siteUrl)}?limit=2`, { credentials: 'include' });
+                    const historyData = await historyResp.json();
+                    const list = (historyData && historyData.history) || [];
+                    if (!Array.isArray(list) || list.length < 2) return;
+                    const latest = list[0];
+                    const previous = list[1];
+                    if (!latest?.latestResults || !previous?.latestResults) return;
+                    // Compute deltas for key metrics
+                    const cur = latest.latestResults;
+                    const prev = previous.latestResults;
+                    const getPerf = (d) => {
+                        const p = d?.technical?.pageSpeed?.performance;
+                        return (typeof p === 'number') ? p : (p?.score ?? 0);
+                    };
+                    const curPerf = getPerf(cur);
+                    const prevPerf = getPerf(prev);
+                    const curMobile = cur?.technical?.mobileResponsive?.overallScore ?? 0;
+                    const prevMobile = prev?.technical?.mobileResponsive?.overallScore ?? 0;
+                    const curSeo = cur?.technical?.pageSpeed?.seo?.score ?? 0;
+                    const prevSeo = prev?.technical?.pageSpeed?.seo?.score ?? 0;
+                    const curIssues = (cur?.roadmap?.issues?.length) ?? 0;
+                    const prevIssues = (prev?.roadmap?.issues?.length) ?? 0;
+
+                    const setDelta = (elId, curVal, prevVal, invert=false) => {
+                        const el = document.getElementById(elId);
+                        if (!el) return;
+                        const diff = Number(curVal) - Number(prevVal);
+                        const good = invert ? diff < 0 : diff > 0;
+                        const cls = diff === 0 ? 'delta-flat' : (good ? 'delta-up' : 'delta-down');
+                        const arrow = diff === 0 ? '→' : (good ? '▲' : '▼');
+                        el.innerHTML = `<span class="${cls}">${arrow} ${diff > 0 ? '+' : ''}${(invert ? -diff : diff).toFixed(0)} vs prev</span>`;
+                    };
+
+                    // Insert delta containers if missing
+                    const ensureDelta = (afterId, deltaId) => {
+                        const valEl = document.getElementById(afterId);
+                        if (!valEl) return;
+                        if (!document.getElementById(deltaId)) {
+                            const span = document.createElement('div');
+                            span.id = deltaId;
+                            span.className = 'delta delta-flat';
+                            valEl.parentElement.appendChild(span);
+                        }
+                    };
+
+                    ensureDelta('pageSpeed', 'pageSpeedDelta');
+                    ensureDelta('mobileScore', 'mobileDelta');
+                    ensureDelta('seoScore', 'seoDelta');
+                    ensureDelta('issuesCount', 'issuesDelta');
+
+                    setDelta('pageSpeedDelta', curPerf, prevPerf);
+                    setDelta('mobileDelta', curMobile, prevMobile);
+                    setDelta('seoDelta', curSeo, prevSeo);
+                    setDelta('issuesDelta', curIssues, prevIssues, true);
+                } catch (e) {
+                    // Silent fail - comparisons are optional
+                }
             }
 
             updateTechnicalDetails(technical) {
