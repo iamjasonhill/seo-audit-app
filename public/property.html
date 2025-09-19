@@ -20,6 +20,9 @@
     .audit-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color:#fff; border:none; border-radius:6px; padding:.5rem .75rem; cursor:pointer; display:inline-flex; align-items:center; gap:.4rem; }
     .muted { color:#666; font-size:.9rem }
     .error { color:#c33; margin:.5rem 0 }
+    .source-pill { display:inline-flex; align-items:center; gap:.35rem; padding:.2rem .5rem; border-radius:999px; font-size:.75rem; border:1px solid #e1e5e9; background:#f8f9fa; color:#555; }
+    .source-db { background:#e8f5e9; border-color:#c8e6c9; color:#2e7d32; }
+    .source-live { background:#eef2ff; border-color:#dde3ff; color:#4a57d1; }
   </style>
   <script>
     // Small helpers reused from dashboard
@@ -53,10 +56,17 @@
 
     async function loadKpis(range, searchType) {
       const el = document.getElementById('kpis');
+      const src = document.getElementById('kpiSource');
       el.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading KPIs...</p>';
       const url = `/api/gsc/analytics/summary?startDate=${range.start}&endDate=${range.end}&searchType=${searchType}`;
       const r = await fetch(url, { credentials:'include' }); const d = await r.json();
       if (!r.ok || !d.success) { el.innerHTML = `<p class="error">${d.message||'Failed to load KPIs'}</p>`; return; }
+      // Source indicator
+      if (src) {
+        src.style.display = 'inline-flex';
+        src.textContent = d.source === 'db' ? 'Saved data' : 'Live from Google';
+        src.className = `source-pill ${d.source==='db' ? 'source-db' : 'source-live'}`;
+      }
       const t = d.totals||{};
       // Compute comparison vs previous period of same length
       const startDate = new Date(range.start);
@@ -301,6 +311,7 @@
           <select id="stype"><option value="web" selected>Web</option><option value="image">Image</option><option value="video">Video</option><option value="news">News</option><option value="discover">Discover</option></select>
         </div>
         <button id="apply" class="audit-btn"><i class="fas fa-check"></i> Apply</button>
+        <span id="kpiSource" class="source-pill" style="margin-left:.5rem; display:none"></span>
       </div>
       <div class="controls" style="margin-top:.25rem">
         <span class="muted">Quick types:</span>
@@ -344,6 +355,7 @@
         <button id="pCountry" class="audit-btn" style="background:#6c757d"><i class="fas fa-globe"></i> Country</button>
         <button id="pAppear"  class="audit-btn" style="background:#6c757d"><i class="fas fa-star"></i> Appearance</button>
       </div>
+      <div id="pSource" class="muted" style="margin:.25rem 0 .25rem 0"></div>
       <div id="pInsights"></div>
       <div id="pPager" style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center"></div>
       <div id="pOpps" style="margin-top:1rem"></div>
@@ -380,6 +392,7 @@
       const typeEl = byId('stype');
       const rowsEl = byId('prow');
       const out = byId('pInsights');
+      const ps = byId('pSource');
       const pager = byId('pPager');
       const btns = {
         pages: byId('pPages'),
@@ -465,6 +478,7 @@
           const r = await fetch(buildUrl(), { credentials:'include' });
           const d = await r.json();
           if (!r.ok || !d.success) throw new Error(d.message||'Failed to load');
+          if (ps) ps.textContent = d.source ? (d.source==='db' ? 'Source: saved data' : 'Source: live from Google') : '';
           // Fetch previous period for rising/falling
           let prevMap = null;
           try {
