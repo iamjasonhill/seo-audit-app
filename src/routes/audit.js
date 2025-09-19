@@ -127,7 +127,22 @@ router.post('/quick', requireAuth, async (req, res, next) => {
     }
 
     const { siteUrl, siteType } = value;
-    const { checks } = req.body; // Array of specific checks to run
+    const checksRaw = req.body && req.body.checks;
+    const allowedChecks = ['technical', 'onpage', 'indexation'];
+    if (!Array.isArray(checksRaw) || checksRaw.length === 0) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: "'checks' must be a non-empty array containing any of: technical, onpage, indexation"
+      });
+    }
+    const checks = checksRaw.map(c => String(c)).filter(Boolean);
+    const invalid = checks.filter(c => !allowedChecks.includes(c));
+    if (invalid.length) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: `Invalid checks: ${invalid.join(', ')}. Allowed: ${allowedChecks.join(', ')}`
+      });
+    }
     
     logger.info(`Starting quick SEO audit for ${siteUrl}`);
     
