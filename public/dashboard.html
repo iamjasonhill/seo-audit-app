@@ -1088,11 +1088,12 @@
                     orphanHosts.sort((a,b)=> String(a.url).localeCompare(String(b.url)));
                     for (const x of orphanHosts) {
                         const cov = await getCoverage(x.url, 'web');
-                        const badgeClass = (cov && cov.start && cov.end) ? 'cov-ok' : 'cov-miss';
+                        const have = !!(cov && cov.start && cov.end);
+                        const badgeClass = have ? 'cov-ok' : 'cov-miss';
                         tiles.push(`
                           <div class="prop-tile">
                             <div class="prop-title"><i class="fas fa-link"></i> URL property</div>
-                            <div class="prop-muted" style="margin:.25rem 0">Saved data <span class="cov-badge ${badgeClass}">${cov ? `${cov.start} → ${cov.end}` : '—'}</span></div>
+                            <div class="prop-muted" style="margin:.25rem 0">Saved data <span class="cov-badge ${badgeClass}">${have ? `${cov.start} → ${cov.end}` : '—'}</span></div>
                             <div class="prop-url"><a href="/property?site=${encodeURIComponent(x.url)}" class="view-audit-btn" target="_blank">${x.url}</a></div>
                           </div>
                         `);

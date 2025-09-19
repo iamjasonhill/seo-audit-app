@@ -443,9 +443,17 @@ router.get('/analytics/summary', requireAuth, async (req, res) => {
 // GET /api/gsc/coverage?searchType=web
 router.get('/coverage', requireAuth, async (req, res) => {
   try {
-    const { selected } = await ensureGscContext(req);
+    // Coverage is derived from our DB; it does not require Google API or a selected property.
+    // Respect explicit siteUrl if provided, otherwise fall back to the user's selected property.
     const st = getSearchType(req.query.searchType);
-    const coverage = await getCoverageFromDb(selected, st);
+    let siteUrl = req.query.siteUrl;
+    if (!siteUrl) {
+      siteUrl = await getUserSelection(req.user.id);
+      if (!siteUrl) {
+        return res.json({ success: true, coverage: null });
+      }
+    }
+    const coverage = await getCoverageFromDb(siteUrl, st);
     return res.json({ success: true, coverage });
   } catch (err) {
     logger.error('GSC coverage error:', err.message);
