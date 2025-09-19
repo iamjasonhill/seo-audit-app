@@ -159,6 +159,23 @@ async function getSummaryFromDb(siteUrl, searchType, range) {
   return { totals, daily };
 }
 
+async function getCoverageFromDb(siteUrl, searchType) {
+  const first = await databaseService.prisma.gscTotalsDaily.findFirst({
+    where: { siteUrl, searchType },
+    select: { date: true },
+    orderBy: { date: 'asc' }
+  });
+  const last = await databaseService.prisma.gscTotalsDaily.findFirst({
+    where: { siteUrl, searchType },
+    select: { date: true },
+    orderBy: { date: 'desc' }
+  });
+  return {
+    start: first?.date ? first.date.toISOString().slice(0,10) : null,
+    end: last?.date ? last.date.toISOString().slice(0,10) : null,
+  };
+}
+
 async function groupByDimFromDb(model, key, siteUrl, searchType, range, startRowNum, rowLimitNum) {
   const start = parseIso(range.startDate);
   const end = parseIso(range.endDate);
@@ -399,7 +416,8 @@ router.get('/analytics/summary', requireAuth, async (req, res) => {
     const covered = await isCovered(selected, st, 'totals', range.endDate);
     if (covered) {
       const { totals, daily } = await getSummaryFromDb(selected, st, range);
-      return res.json({ success: true, property: selected, totals, daily, source: 'db' });
+      const coverage = await getCoverageFromDb(selected, st);
+      return res.json({ success: true, property: selected, totals, daily, source: 'db', coverage });
     }
 
     // Fallback to live API
@@ -419,6 +437,19 @@ router.get('/analytics/summary', requireAuth, async (req, res) => {
   } catch (err) {
     logger.error('GSC analytics summary error:', err.message);
     res.status(500).json({ error: 'AnalyticsSummaryError', message: err.message });
+  }
+});
+
+// GET /api/gsc/coverage?searchType=web
+router.get('/coverage', requireAuth, async (req, res) => {
+  try {
+    const { selected } = await ensureGscContext(req);
+    const st = getSearchType(req.query.searchType);
+    const coverage = await getCoverageFromDb(selected, st);
+    return res.json({ success: true, coverage });
+  } catch (err) {
+    logger.error('GSC coverage error:', err.message);
+    res.status(500).json({ error: 'CoverageError', message: err.message });
   }
 });
 

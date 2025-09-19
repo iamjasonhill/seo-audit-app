@@ -61,11 +61,25 @@
       const url = `/api/gsc/analytics/summary?startDate=${range.start}&endDate=${range.end}&searchType=${searchType}`;
       const r = await fetch(url, { credentials:'include' }); const d = await r.json();
       if (!r.ok || !d.success) { el.innerHTML = `<p class="error">${d.message||'Failed to load KPIs'}</p>`; return; }
-      // Source indicator
+      // Source indicator with DB coverage
       if (src) {
         src.style.display = 'inline-flex';
-        src.textContent = d.source === 'db' ? 'Saved data' : 'Live from Google';
-        src.className = `source-pill ${d.source==='db' ? 'source-db' : 'source-live'}`;
+        const setDb = (cov) => {
+          const covText = (cov && cov.start && cov.end) ? `Saved data • ${cov.start} → ${cov.end}` : 'Saved data';
+          src.textContent = covText;
+          src.className = 'source-pill source-db';
+        };
+        if (d.source === 'db') {
+          if (d.coverage) { setDb(d.coverage); }
+          // Always fetch authoritative coverage to ensure display even if summary omitted it
+          const type = document.getElementById('stype').value || searchType || 'web';
+          fetch(`/api/gsc/coverage?searchType=${encodeURIComponent(type)}`, { credentials:'include' })
+            .then(r=>r.json()).then(x=> setDb(x.coverage || null))
+            .catch(()=> setDb(null));
+        } else {
+          src.textContent = 'Live from Google';
+          src.className = 'source-pill source-live';
+        }
       }
       const t = d.totals||{};
       // Compute comparison vs previous period of same length
