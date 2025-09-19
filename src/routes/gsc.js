@@ -6,6 +6,7 @@ const databaseService = require('../services/database');
 const { requireAuth } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const gscAuth = require('../services/gscAuth');
+const gscScheduler = require('../services/gscScheduler');
 
 const router = express.Router();
 
@@ -154,6 +155,24 @@ async function groupByDimFromDb(model, key, siteUrl, searchType, range, startRow
   const startRow = Math.max(0, Number(startRowNum) || 0);
   const limit = Math.max(1, Math.min(25000, Number(rowLimitNum) || 1000));
   return agg.slice(startRow, startRow + limit);
+}
+
+async function ensureRegisteredProperty(userId, siteUrl, opts = {}) {
+  try {
+    const now = new Date();
+    await databaseService.prisma.gscUserProperty.upsert({
+      where: { userId_siteUrl: { userId, siteUrl } },
+      update: { enabled: opts.enabled ?? true, priorityOrder: opts.priorityOrder ?? 0, syncIntervalHours: opts.syncIntervalHours ?? 24, nextSyncDueAt: now },
+      create: { userId, siteUrl, enabled: opts.enabled ?? true, priorityOrder: opts.priorityOrder ?? 0, syncIntervalHours: opts.syncIntervalHours ?? 24, nextSyncDueAt: now },
+    });
+  } catch (e) { /* ignore */ }
+}
+
+async function respondNotReady(req, res, siteUrl, searchType) {
+  await ensureRegisteredProperty(req.user.id, siteUrl);
+  try { gscScheduler.tick().catch(()=>{}); } catch (_) {}
+  const prop = await databaseService.prisma.gscUserProperty.findUnique({ where: { userId_siteUrl: { userId: req.user.id, siteUrl } } }).catch(()=>null);
+  return res.status(202).json({ success: false, error: 'NotReady', message: 'Data sync in progress', siteUrl, searchType, nextSyncDueAt: prop?.nextSyncDueAt || null });
 }
 
 // GET /api/gsc/connect - Initiate OAuth flow
@@ -332,8 +351,11 @@ router.get('/analytics/summary', requireAuth, async (req, res) => {
       const coverage = await getCoverageFromDb(selected, st);
       return res.json({ success: true, property: selected, totals, daily, source: 'db', coverage });
     }
-
-    // Fallback to live API
+    // DB-only mode: do not call Google live
+    if (process.env.GSC_DB_ONLY === 'true') {
+      return respondNotReady(req, res, selected, st);
+    }
+    // Fallback to live API (when DB-only not enforced)
     const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client });
     const totalsResp = await webmasters.searchanalytics.query({
       siteUrl: selected,
@@ -397,6 +419,9 @@ router.get('/analytics/pages', requireAuth, async (req, res) => {
       const data = await groupByDimFromDb('gscPagesDaily', 'page', selected, st, range, startRow, rowLimit);
       return res.json({ success: true, range, data, source: 'db' });
     }
+    if (process.env.GSC_DB_ONLY === 'true') {
+      return respondNotReady(req, res, selected, st);
+    }
     const rows = await runSaQuery(oauth2Client, selected, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['page'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
     const data = rows.map(r => ({ page: r.keys?.[0], clicks: r.clicks||0, impressions: r.impressions||0, ctr: r.ctr||0, position: r.position||0 }));
     res.json({ success: true, range, data, source: 'live' });
@@ -417,6 +442,9 @@ router.get('/analytics/queries', requireAuth, async (req, res) => {
     if (await isCovered(selected, st, 'query', range.endDate)) {
       const data = await groupByDimFromDb('gscQueriesDaily', 'query', selected, st, range, startRow, rowLimit);
       return res.json({ success: true, range, data, source: 'db' });
+    }
+    if (process.env.GSC_DB_ONLY === 'true') {
+      return respondNotReady(req, res, selected, st);
     }
     const rows = await runSaQuery(oauth2Client, selected, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['query'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
     const data = rows.map(r => ({ query: r.keys?.[0], clicks: r.clicks||0, impressions: r.impressions||0, ctr: r.ctr||0, position: r.position||0 }));
@@ -468,6 +496,9 @@ router.get('/analytics/device', requireAuth, async (req, res) => {
       const data = await groupByDimFromDb('gscDeviceDaily', 'device', selected, st, range, startRow, rowLimit);
       return res.json({ success: true, range, data, source: 'db' });
     }
+    if (process.env.GSC_DB_ONLY === 'true') {
+      return respondNotReady(req, res, selected, st);
+    }
     const rows = await runSaQuery(oauth2Client, selected, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['device'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
     const data = rows.map(r => ({ device: r.keys?.[0], clicks: r.clicks||0, impressions: r.impressions||0, ctr: r.ctr||0, position: r.position||0 }));
     res.json({ success: true, range, data, source: 'live' });
@@ -489,6 +520,9 @@ router.get('/analytics/country', requireAuth, async (req, res) => {
       const data = await groupByDimFromDb('gscCountryDaily', 'country', selected, st, range, startRow, rowLimit);
       return res.json({ success: true, range, data, source: 'db' });
     }
+    if (process.env.GSC_DB_ONLY === 'true') {
+      return respondNotReady(req, res, selected, st);
+    }
     const rows = await runSaQuery(oauth2Client, selected, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['country'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
     const data = rows.map(r => ({ country: r.keys?.[0], clicks: r.clicks||0, impressions: r.impressions||0, ctr: r.ctr||0, position: r.position||0 }));
     res.json({ success: true, range, data, source: 'live' });
@@ -506,6 +540,9 @@ router.get('/analytics/appearance', requireAuth, async (req, res) => {
     const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
+    if (process.env.GSC_DB_ONLY === 'true') {
+      return respondNotReady(req, res, selected, getSearchType(searchType));
+    }
     const rows = await runSaQuery(oauth2Client, selected, {
       startDate: range.startDate,
       endDate: range.endDate,
@@ -599,6 +636,35 @@ router.get('/sync-status', requireAuth, async (req, res) => {
   } catch (err) {
     logger.error('GSC sync-status error:', err.message);
     res.status(500).json({ error: 'SyncStatusError', message: err.message });
+  }
+});
+
+// Register a property for background syncing
+router.post('/sync/register', requireAuth, async (req, res) => {
+  try {
+    const { siteUrl, priorityOrder = 0, syncIntervalHours = 24, enabled = true } = req.body || {};
+    if (!siteUrl) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
+    await databaseService.prisma.gscUserProperty.upsert({
+      where: { userId_siteUrl: { userId: req.user.id, siteUrl } },
+      update: { enabled, priorityOrder, syncIntervalHours, nextSyncDueAt: new Date() },
+      create: { userId: req.user.id, siteUrl, enabled, priorityOrder, syncIntervalHours, nextSyncDueAt: new Date() },
+    });
+    try { gscScheduler.tick().catch(()=>{}); } catch (_) {}
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('GSC sync register error:', err.message);
+    res.status(500).json({ error: 'SyncRegisterError', message: err.message });
+  }
+});
+
+// List registered properties
+router.get('/sync/properties', requireAuth, async (req, res) => {
+  try {
+    const rows = await databaseService.prisma.gscUserProperty.findMany({ where: { userId: req.user.id }, orderBy: [ { priorityOrder: 'asc' } ] });
+    res.json({ success: true, properties: rows });
+  } catch (err) {
+    logger.error('GSC sync properties error:', err.message);
+    res.status(500).json({ error: 'SyncPropertiesError', message: err.message });
   }
 });
 
