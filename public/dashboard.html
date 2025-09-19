@@ -70,7 +70,7 @@
 
         .dashboard-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr;
             gap: 2rem;
             margin-bottom: 2rem;
         }
@@ -308,6 +308,20 @@
 
         <div class="dashboard-grid">
             <div class="card">
+                <h2><i class="fas fa-info-circle"></i> Quick Stats</h2>
+                <div id="quickStats">
+                    <p><strong>Total Audits:</strong> <span id="totalAudits">-</span></p>
+                    <p><strong>Last Audit:</strong> <span id="lastAudit">-</span></p>
+                    <p><strong>Most Audited Site:</strong> <span id="mostAudited">-</span></p>
+                </div>
+                <div style="margin-top:1rem; display:flex; gap:.5rem; align-items:center;">
+                    <button id="connectGscBtn" class="audit-btn" style="width:auto"><i class="fab fa-google"></i> Connect Google Search Console</button>
+                    <button id="listGscPropsBtn" class="audit-btn" style="width:auto; background:#6c757d"><i class="fas fa-list"></i> List Properties</button>
+                </div>
+                <div id="gscProperties" style="margin-top:.75rem"></div>
+            </div>
+
+            <div class="card">
                 <h2><i class="fas fa-search"></i> New Audit</h2>
                 <form id="auditForm" class="audit-form">
                     <div class="form-group">
@@ -333,20 +347,6 @@
                         <i class="fas fa-bolt"></i> Quick Test movingagain.com.au
                     </button>
                 </form>
-            </div>
-
-            <div class="card">
-                <h2><i class="fas fa-info-circle"></i> Quick Stats</h2>
-                <div id="quickStats">
-                    <p><strong>Total Audits:</strong> <span id="totalAudits">-</span></p>
-                    <p><strong>Last Audit:</strong> <span id="lastAudit">-</span></p>
-                    <p><strong>Most Audited Site:</strong> <span id="mostAudited">-</span></p>
-                </div>
-                <div style="margin-top:1rem; display:flex; gap:.5rem; align-items:center;">
-                    <button id="connectGscBtn" class="audit-btn" style="width:auto"><i class="fab fa-google"></i> Connect Google Search Console</button>
-                    <button id="listGscPropsBtn" class="audit-btn" style="width:auto; background:#6c757d"><i class="fas fa-list"></i> List Properties</button>
-                </div>
-                <div id="gscProperties" style="margin-top:.75rem"></div>
             </div>
 
             
@@ -1049,17 +1049,6 @@
                             return (r.ok && d.success) ? (d.coverage || null) : null;
                         } catch(_) { return null; }
                     }
-                    async function verifyDb(siteUrl, type){
-                        try {
-                            const now = new Date();
-                            const start = new Date(now.getTime() - 27*24*60*60*1000);
-                            const iso = (d)=>d.toISOString().slice(0,10);
-                            const url = `/api/gsc/analytics/summary?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${iso(start)}&endDate=${iso(now)}&searchType=${encodeURIComponent(type)}`;
-                            const r = await fetch(url, { credentials:'include' });
-                            const d = await r.json();
-                            return (r.ok && d.success && d.source === 'db');
-                        } catch(_) { return false; }
-                    }
 
                     // Build tiles: domains first, then any hosts without sc-domain
                     const tiles = [];
@@ -1080,15 +1069,14 @@
                         const scd = groups.domain[host].scDomain;
                         const types = ['web','image','video'];
                         const covs = await Promise.all(types.map(t => getCoverage(scd, t)));
-                        const dbVerified = await verifyDb(scd, 'web');
                         const present = covs.filter(c => c && c.start && c.end);
                         const minStart = present.length ? present.map(c=>c.start).sort()[0] : null;
                         const maxEnd = present.length ? present.map(c=>c.end).sort().slice(-1)[0] : null;
-                        const badgeClass = (dbVerified && present.length) ? (present.length === types.length ? 'cov-ok' : 'cov-warn') : 'cov-miss';
+                        const badgeClass = present.length === 0 ? 'cov-miss' : (present.length === types.length ? 'cov-ok' : 'cov-warn');
                         tiles.push(`
                           <div class="prop-tile">
                             <div class="prop-title"><i class="fas fa-globe"></i> sc-domain:${host}</div>
-                            <div class="prop-muted" style="margin:.25rem 0">Saved data <span class="cov-badge ${badgeClass}">${(dbVerified && minStart && maxEnd) ? `${minStart} → ${maxEnd}` : '—'}</span></div>
+                            <div class="prop-muted" style="margin:.25rem 0">Saved data <span class="cov-badge ${badgeClass}">${(minStart && maxEnd) ? `${minStart} → ${maxEnd}` : '—'}</span></div>
                             <div class="prop-url"><a href="/property?site=${encodeURIComponent(scd)}" class="view-audit-btn" target="_blank">Open domain property</a></div>
                             ${renderUrlList(host)}
                           </div>
@@ -1100,12 +1088,11 @@
                     orphanHosts.sort((a,b)=> String(a.url).localeCompare(String(b.url)));
                     for (const x of orphanHosts) {
                         const cov = await getCoverage(x.url, 'web');
-                        const dbVerified = await verifyDb(x.url, 'web');
-                        const badgeClass = (dbVerified && cov && cov.start && cov.end) ? 'cov-ok' : 'cov-miss';
+                        const badgeClass = (cov && cov.start && cov.end) ? 'cov-ok' : 'cov-miss';
                         tiles.push(`
                           <div class="prop-tile">
                             <div class="prop-title"><i class="fas fa-link"></i> URL property</div>
-                            <div class="prop-muted" style="margin:.25rem 0">Saved data <span class="cov-badge ${badgeClass}">${(dbVerified && cov) ? `${cov.start} → ${cov.end}` : '—'}</span></div>
+                            <div class="prop-muted" style="margin:.25rem 0">Saved data <span class="cov-badge ${badgeClass}">${cov ? `${cov.start} → ${cov.end}` : '—'}</span></div>
                             <div class="prop-url"><a href="/property?site=${encodeURIComponent(x.url)}" class="view-audit-btn" target="_blank">${x.url}</a></div>
                           </div>
                         `);
