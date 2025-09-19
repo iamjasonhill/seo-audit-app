@@ -16,8 +16,9 @@ const users = [
 const requireAuth = (req, res, next) => {
   const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
   
+  const fullPath = req.originalUrl || req.url || req.path || '';
   if (!token) {
-    if (req.path.startsWith('/api/')) {
+    if (fullPath.startsWith('/api/')) {
       return res.status(401).json({ error: 'Authentication required' });
     } else {
       return res.redirect('/login');
@@ -37,7 +38,7 @@ const requireAuth = (req, res, next) => {
   } catch (error) {
     logger.error('JWT verification failed:', error.message);
     
-    if (req.path.startsWith('/api/')) {
+    if (fullPath.startsWith('/api/')) {
       return res.status(401).json({ error: 'Invalid token' });
     } else {
       return res.redirect('/login');

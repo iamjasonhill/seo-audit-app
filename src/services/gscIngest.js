@@ -65,6 +65,42 @@ async function upsertTotalsRows(siteUrl, searchType, rows) {
   }
 }
 
+async function upsertZeroTotalsForMissingDays(siteUrl, searchType, allIsoDays, existingRows) {
+  try {
+    const present = new Set((existingRows||[]).map(r => r.keys?.[0]).filter(Boolean));
+    for (const iso of allIsoDays) {
+      if (present.has(iso)) continue;
+      const data = {
+        siteUrl,
+        date: parseIsoDate(iso),
+        searchType,
+        clicks: 0,
+        impressions: 0,
+        ctr: 0,
+        position: 0,
+      };
+      await databaseService.prisma.gscTotalsDaily.upsert({
+        where: {
+          siteUrl_date_searchType: {
+            siteUrl: data.siteUrl,
+            date: data.date,
+            searchType: data.searchType,
+          },
+        },
+        update: {
+          clicks: 0,
+          impressions: 0,
+          ctr: 0,
+          position: 0,
+        },
+        create: data,
+      });
+    }
+  } catch (e) {
+    logger.warn('Fill missing totals failed:', e.message);
+  }
+}
+
 async function upsertDimRows(model, keyName, siteUrl, searchType, rows) {
   for (const r of rows) {
     const dateStr = r.keys?.[0];
@@ -108,12 +144,23 @@ async function upsertDimRows(model, keyName, siteUrl, searchType, rows) {
 async function paginateAndSave(webmasters, siteUrl, searchType, baseBody, saver) {
   let startRow = 0;
   const rowLimit = DEFAULT_PAGE_SIZE;
+  // Progress accounting is done by the caller via an optional callback on baseBody.__progress
+  let requestsDone = 0;
+  let requestsPlanned = 1; // optimistic; will grow if we hit page boundaries
+  const report = typeof baseBody.__progress === 'function' ? baseBody.__progress : null;
+  if (report) report({ requestsDone, requestsPlanned });
   while (true) {
     const body = { ...baseBody, rowLimit, startRow };
+    delete body.__progress;
     const rows = await querySa(webmasters, siteUrl, body);
-    if (!rows.length) break;
+    requestsDone += 1;
+    if (!rows.length) { if (report) report({ requestsDone, requestsPlanned }); break; }
     await saver(rows);
     startRow += rows.length;
+    if (rows.length === rowLimit) {
+      requestsPlanned += 1; // there is at least one more page
+    }
+    if (report) report({ requestsDone, requestsPlanned });
     await sleep(DEFAULT_SLEEP_MS);
     if (rows.length < rowLimit) break;
   }
@@ -146,6 +193,7 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
     startDate,
     endDate,
     searchTypes = ['web'],
+    onlyTotals = false,
   } = options;
 
   const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client });
@@ -164,7 +212,7 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
 
   for (const searchType of searchTypes) {
     logger.info(`GSC backfill start site=${siteUrl} type=${searchType} days=${rangeDays.length}`);
-    await updateSync(siteUrl, 'totals', searchType, 'running', null, null);
+    await updateSync(siteUrl, 'totals', searchType, 'running', '0/1 (0%). Estimating…', null);
 
     // Totals
     try {
@@ -177,6 +225,8 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
         rowLimit: 5000,
       });
       await upsertTotalsRows(siteUrl, searchType, totalsRows);
+      // Densify: upsert zero rows for days with no data so coverage shows full range
+      await upsertZeroTotalsForMissingDays(siteUrl, searchType, rangeDays, totalsRows);
       await updateSync(siteUrl, 'totals', searchType, 'ok', null, end);
     } catch (e) {
       await updateSync(siteUrl, 'totals', searchType, 'error', e.message, null);
@@ -185,7 +235,25 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
 
     // Helper to run per-dimension (date + dimension)
     const runDim = async (dimension, keyName, model) => {
-      await updateSync(siteUrl, dimension, searchType, 'running', null, null);
+      // Start progress for this dimension
+      let startedAt = Date.now();
+      let lastMsgTime = 0;
+      let cached = { requestsDone: 0, requestsPlanned: 1 };
+      const renderMsg = () => {
+        const done = cached.requestsDone;
+        const plan = Math.max(cached.requestsPlanned, done || 1);
+        const pct = Math.min(99, Math.floor((done / plan) * 100));
+        const elapsed = Date.now() - startedAt;
+        const rate = done > 0 ? (elapsed / done) : 0; // ms per request
+        const remaining = Math.max(0, plan - done);
+        const etaMs = rate * remaining;
+        const mins = Math.floor(etaMs / 60000);
+        const secs = Math.floor((etaMs % 60000) / 1000);
+        const etaStr = `${mins}:${secs.toString().padStart(2,'0')}`;
+        return `${done}/${plan} (${pct}%). ETA ${etaStr}`;
+      };
+
+      await updateSync(siteUrl, dimension, searchType, 'running', renderMsg(), null);
       try {
         await paginateAndSave(webmasters, siteUrl, searchType, {
           startDate: formatDate(start),
@@ -193,6 +261,14 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
           searchType,
           dataState: 'all',
           dimensions: ['date', dimension],
+          __progress: ({ requestsDone, requestsPlanned }) => {
+            cached = { requestsDone, requestsPlanned };
+            const now = Date.now();
+            if (now - lastMsgTime > 1500) { // throttle DB writes
+              lastMsgTime = now;
+              updateSync(siteUrl, dimension, searchType, 'running', renderMsg(), null).catch(()=>{});
+            }
+          },
         }, async (rows) => {
           await upsertDimRows(model, keyName, siteUrl, searchType, rows);
         });
@@ -203,58 +279,62 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
       }
     };
 
-    await runDim('page', 'page', 'gscPagesDaily');
-    await runDim('query', 'query', 'gscQueriesDaily');
-    await runDim('device', 'device', 'gscDeviceDaily');
-    await runDim('country', 'country', 'gscCountryDaily');
+    if (!onlyTotals) {
+      await runDim('page', 'page', 'gscPagesDaily');
+      await runDim('query', 'query', 'gscQueriesDaily');
+      await runDim('device', 'device', 'gscDeviceDaily');
+      await runDim('country', 'country', 'gscCountryDaily');
+    }
 
     // Appearance: fetch without date (API restriction) and store as aggregated range
-    await updateSync(siteUrl, 'searchAppearance', searchType, 'running', null, null);
-    try {
-      const appearanceRows = await querySa(webmasters, siteUrl, {
-        startDate: formatDate(start),
-        endDate: formatDate(end),
-        searchType,
-        dataState: 'all',
-        dimensions: ['searchAppearance'],
-        rowLimit: 25000,
-      });
-      for (const r of appearanceRows) {
-        const appearance = r.keys?.[0];
-        if (!appearance) continue;
-        const data = {
-          siteUrl,
+    if (!onlyTotals) {
+      await updateSync(siteUrl, 'searchAppearance', searchType, 'running', '0/1 (0%). Estimating…', null);
+      try {
+        const appearanceRows = await querySa(webmasters, siteUrl, {
+          startDate: formatDate(start),
+          endDate: formatDate(end),
           searchType,
-          appearance,
-          startDate: parseIsoDate(formatDate(start)),
-          endDate: parseIsoDate(formatDate(end)),
-          clicks: Math.round(r.clicks || 0),
-          impressions: Math.round(r.impressions || 0),
-          ctr: Number(r.ctr || 0),
-          position: Number(r.position || 0),
-        };
-        await databaseService.prisma.gscAppearanceRange.upsert({
-          where: {
-            siteUrl_searchType_appearance_startDate_endDate: {
-              siteUrl: data.siteUrl,
-              searchType: data.searchType,
-              appearance: data.appearance,
-              startDate: data.startDate,
-              endDate: data.endDate,
-            }
-          },
-          update: {
-            clicks: data.clicks,
-            impressions: data.impressions,
-            ctr: data.ctr,
-            position: data.position,
-          },
-          create: data,
+          dataState: 'all',
+          dimensions: ['searchAppearance'],
+          rowLimit: 25000,
         });
+        for (const r of appearanceRows) {
+          const appearance = r.keys?.[0];
+          if (!appearance) continue;
+          const data = {
+            siteUrl,
+            searchType,
+            appearance,
+            startDate: parseIsoDate(formatDate(start)),
+            endDate: parseIsoDate(formatDate(end)),
+            clicks: Math.round(r.clicks || 0),
+            impressions: Math.round(r.impressions || 0),
+            ctr: Number(r.ctr || 0),
+            position: Number(r.position || 0),
+          };
+          await databaseService.prisma.gscAppearanceRange.upsert({
+            where: {
+              siteUrl_searchType_appearance_startDate_endDate: {
+                siteUrl: data.siteUrl,
+                searchType: data.searchType,
+                appearance: data.appearance,
+                startDate: data.startDate,
+                endDate: data.endDate,
+              }
+            },
+            update: {
+              clicks: data.clicks,
+              impressions: data.impressions,
+              ctr: data.ctr,
+              position: data.position,
+            },
+            create: data,
+          });
+        }
+        await updateSync(siteUrl, 'searchAppearance', searchType, 'ok', null, end);
+      } catch (e) {
+        await updateSync(siteUrl, 'searchAppearance', searchType, 'error', e.message, null);
       }
-      await updateSync(siteUrl, 'searchAppearance', searchType, 'ok', null, end);
-    } catch (e) {
-      await updateSync(siteUrl, 'searchAppearance', searchType, 'error', e.message, null);
     }
 
     logger.info(`GSC backfill done site=${siteUrl} type=${searchType}`);

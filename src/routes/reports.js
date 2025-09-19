@@ -202,7 +202,9 @@ function getReportTemplate(type, siteType = 'Generic') {
     }
   };
   
-  const baseTemplate = templates[type] || templates.executive;
+  // Clone to avoid mutating shared objects between requests
+  const base = templates[type] || templates.executive;
+  const baseTemplate = { title: base.title, sections: [...base.sections] };
   
   // Add site-type specific sections
   if (siteType === 'Ecommerce') {

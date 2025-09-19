@@ -136,15 +136,18 @@ router.post('/quick', requireAuth, async (req, res, next) => {
     
     // Run only requested checks
     if (checks.includes('technical')) {
-      results.technical = await auditor.analyzeTechnicalHealth();
+      await auditor.analyzeTechnicalHealth();
+      results.technical = auditor.results.technical;
     }
     
     if (checks.includes('onpage')) {
-      results.onPage = await auditor.analyzeOnPageOptimization();
+      await auditor.analyzeOnPageOptimization();
+      results.onPage = auditor.results.onPage;
     }
     
     if (checks.includes('indexation')) {
-      results.indexation = await auditor.checkIndexationAndVisibility();
+      await auditor.checkIndexationAndVisibility();
+      results.indexation = auditor.results.indexation;
     }
     
     res.json({
