@@ -5,50 +5,9 @@ const jwt = require('jsonwebtoken');
 const databaseService = require('../services/database');
 const { requireAuth } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const gscAuth = require('../services/gscAuth');
 
 const router = express.Router();
-
-// Helper: load and persist tokens & selection in DB
-async function getUserTokens(userId) {
-  try {
-    const row = await databaseService.prisma.gscOAuthToken.findUnique({ where: { userId } });
-    return row || null;
-  } catch (_) { return null; }
-}
-
-async function saveUserTokens(userId, tokens) {
-  const existing = await databaseService.prisma.gscOAuthToken.findUnique({ where: { userId } }).catch(()=>null);
-  const refreshToken = tokens.refresh_token || existing?.refreshToken || null;
-  const expiryDate = tokens.expiry_date ? new Date(tokens.expiry_date) : (existing?.expiryDate || null);
-  const data = {
-    userId,
-    accessToken: tokens.access_token || null,
-    refreshToken,
-    scope: tokens.scope || existing?.scope || null,
-    tokenType: tokens.token_type || existing?.tokenType || null,
-    expiryDate,
-  };
-  await databaseService.prisma.gscOAuthToken.upsert({
-    where: { userId },
-    update: data,
-    create: data,
-  });
-}
-
-async function getUserSelection(userId) {
-  try {
-    const row = await databaseService.prisma.gscUserSelection.findUnique({ where: { userId } });
-    return row?.siteUrl || null;
-  } catch (_) { return null; }
-}
-
-async function setUserSelection(userId, siteUrl) {
-  await databaseService.prisma.gscUserSelection.upsert({
-    where: { userId },
-    update: { siteUrl },
-    create: { userId, siteUrl },
-  });
-}
 
 // Attempt to bind tokens from cookie if present
 async function autoBindFromCookie(req, res) {
@@ -56,7 +15,7 @@ async function autoBindFromCookie(req, res) {
     const raw = req.cookies?.gsc_tokens;
     if (!raw) return false;
     const tokens = JSON.parse(raw);
-    await saveUserTokens(req.user.id, tokens);
+    await gscAuth.saveUserTokens(req.user.id, tokens);
     try { if (res && res.clearCookie) res.clearCookie('gsc_tokens'); } catch (_) {}
     return true;
   } catch (_) {
@@ -64,23 +23,13 @@ async function autoBindFromCookie(req, res) {
   }
 }
 
-const getOAuth2Client = () => {
-  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-  const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI;
-  if (!clientId || !clientSecret || !redirectUri) {
-    throw new Error('Google OAuth env vars are not configured');
-  }
-  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
-};
-
 const ensureGscContext = async (req) => {
-  let row = await getUserTokens(req.user.id);
-  const selected = await getUserSelection(req.user.id);
+  let row = await gscAuth.getUserTokens(req.user.id);
+  const selected = await gscAuth.getUserSelection(req.user.id);
   if (!row || (!row.accessToken && !row.refreshToken)) {
     // Try to bind from cookie automatically
     await autoBindFromCookie(req, /* res */ undefined);
-    row = await getUserTokens(req.user.id);
+    row = await gscAuth.getUserTokens(req.user.id);
   }
   if (!row || (!row.accessToken && !row.refreshToken)) {
     const err = new Error('Connect Google first');
@@ -92,14 +41,14 @@ const ensureGscContext = async (req) => {
     err.status = 400; err.code = 'NoProperty';
     throw err;
   }
-  const oauth2Client = getOAuth2Client();
+  const oauth2Client = gscAuth.getOAuth2Client();
   const creds = {};
   if (row.accessToken) creds.access_token = row.accessToken;
   if (row.refreshToken) creds.refresh_token = row.refreshToken;
   if (row.expiryDate) creds.expiry_date = new Date(row.expiryDate).getTime();
   oauth2Client.setCredentials(creds);
   oauth2Client.on('tokens', async (t) => {
-    try { await saveUserTokens(req.user.id, t); } catch (_) {}
+    try { await gscAuth.saveUserTokens(req.user.id, t); } catch (_) {}
   });
   return { oauth2Client, selected };
 };
@@ -179,8 +128,6 @@ async function getCoverageFromDb(siteUrl, searchType) {
 async function groupByDimFromDb(model, key, siteUrl, searchType, range, startRowNum, rowLimitNum) {
   const start = parseIso(range.startDate);
   const end = parseIso(range.endDate);
-  // Fetch raw rows and aggregate in JS to get weighted CTR/position
-  // This trades some CPU for correctness without complex SQL
   const rows = await databaseService.prisma[model].findMany({
     where: { siteUrl, searchType, date: { gte: start, lte: end } },
     select: { [key]: true, clicks: true, impressions: true, ctr: true, position: true },
@@ -212,19 +159,9 @@ async function groupByDimFromDb(model, key, siteUrl, searchType, range, startRow
 // GET /api/gsc/connect - Initiate OAuth flow
 router.get('/connect', requireAuth, async (req, res) => {
   try {
-    const oauth2Client = getOAuth2Client();
-    const scopes = [
-      'openid',
-      'email',
-      'profile',
-      // Use full scope to support URL Inspection API
-      'https://www.googleapis.com/auth/webmasters'
-    ];
-    const url = oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      prompt: 'consent',
-      scope: scopes,
-    });
+    const oauth2Client = gscAuth.getOAuth2Client();
+    const scopes = [ 'openid', 'email', 'profile', 'https://www.googleapis.com/auth/webmasters' ];
+    const url = oauth2Client.generateAuthUrl({ access_type: 'offline', prompt: 'consent', scope: scopes });
     res.json({ success: true, authUrl: url });
   } catch (err) {
     logger.error('GSC connect error:', err.message);
@@ -236,32 +173,21 @@ router.get('/connect', requireAuth, async (req, res) => {
 router.get('/callback', async (req, res) => {
   try {
     const { code } = req.query;
-    if (!code) {
-      return res.status(400).json({ error: 'MissingCode', message: 'Missing OAuth code' });
-    }
-    const oauth2Client = getOAuth2Client();
+    if (!code) return res.status(400).json({ error: 'MissingCode', message: 'Missing OAuth code' });
+    const oauth2Client = gscAuth.getOAuth2Client();
     const { tokens } = await oauth2Client.getToken(code);
-    // If user is already authenticated to the app, persist tokens immediately
     try {
       const appToken = req.cookies?.token;
       if (appToken) {
         const decoded = jwt.verify(appToken, process.env.SESSION_SECRET || 'your-secret-key-change-in-production');
         if (decoded?.userId) {
-          await saveUserTokens(decoded.userId, tokens);
+          await gscAuth.saveUserTokens(decoded.userId, tokens);
           return res.redirect('/dashboard');
         }
       }
-    } catch (_) { /* fall back to cookie bind */ }
-
-    // Fallback for single-admin local use: persist to admin (id:1) if no session
-    try { await saveUserTokens(1, tokens); } catch (_) {}
-    // Also set a short-lived cookie to allow explicit bind if needed
-    res.cookie('gsc_tokens', JSON.stringify(tokens), {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 10 * 60 * 1000,
-    });
+    } catch (_) {}
+    try { await gscAuth.saveUserTokens(1, tokens); } catch (_) {}
+    res.cookie('gsc_tokens', JSON.stringify(tokens), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: 10 * 60 * 1000 });
     return res.redirect('/dashboard');
   } catch (err) {
     logger.error('GSC callback error:', err.message);
@@ -276,15 +202,7 @@ router.post('/url/inspect', requireAuth, async (req, res) => {
     const { url } = req.body || {};
     if (!url) return res.status(400).json({ error: 'BadRequest', message: 'url is required' });
     const searchconsole = google.searchconsole({ version: 'v1', auth: oauth2Client });
-
-    // Use URL Inspection API
-    const resp = await searchconsole.urlInspection.index.inspect({
-      requestBody: {
-        inspectionUrl: url,
-        siteUrl: selected
-      }
-    });
-
+    const resp = await searchconsole.urlInspection.index.inspect({ requestBody: { inspectionUrl: url, siteUrl: selected } });
     const result = resp.data?.inspectionResult || {};
     res.json({ success: true, result });
   } catch (err) {
@@ -298,11 +216,9 @@ router.post('/url/inspect', requireAuth, async (req, res) => {
 router.post('/bind', requireAuth, async (req, res) => {
   try {
     const raw = req.cookies?.gsc_tokens;
-    if (!raw) {
-      return res.status(400).json({ error: 'NoTokens', message: 'No OAuth tokens to bind' });
-    }
+    if (!raw) return res.status(400).json({ error: 'NoTokens', message: 'No OAuth tokens to bind' });
     const tokens = JSON.parse(raw);
-    await saveUserTokens(req.user.id, tokens);
+    await gscAuth.saveUserTokens(req.user.id, tokens);
     res.clearCookie('gsc_tokens');
     res.json({ success: true });
   } catch (err) {
@@ -314,12 +230,9 @@ router.post('/bind', requireAuth, async (req, res) => {
 // GET /api/gsc/properties - List verified properties for the connected account
 router.get('/properties', requireAuth, async (req, res) => {
   try {
-    // Listing properties should not require a selected property – only valid tokens
-    const row = await getUserTokens(req.user.id);
-    if (!row || (!row.accessToken && !row.refreshToken)) {
-      return res.status(401).json({ error: 'NotConnected', message: 'Connect Google first' });
-    }
-    const oauth2Client = getOAuth2Client();
+    const row = await gscAuth.getUserTokens(req.user.id);
+    if (!row || (!row.accessToken && !row.refreshToken)) return res.status(401).json({ error: 'NotConnected', message: 'Connect Google first' });
+    const oauth2Client = gscAuth.getOAuth2Client();
     const creds = {};
     if (row.accessToken) creds.access_token = row.accessToken;
     if (row.refreshToken) creds.refresh_token = row.refreshToken;
@@ -344,12 +257,12 @@ module.exports = router;
 // GET /api/gsc/selected - get currently selected property
 router.get('/selected', requireAuth, async (req, res) => {
   try {
-    let selected = await getUserSelection(req.user.id);
+    let selected = await gscAuth.getUserSelection(req.user.id);
     // If not set yet, try to default to the first accessible property
     if (!selected) {
-      const row = await getUserTokens(req.user.id);
+      const row = await gscAuth.getUserTokens(req.user.id);
       if (row && (row.accessToken || row.refreshToken)) {
-        const oauth2Client = getOAuth2Client();
+        const oauth2Client = gscAuth.getOAuth2Client();
         const creds = {};
         if (row.accessToken) creds.access_token = row.accessToken;
         if (row.refreshToken) creds.refresh_token = row.refreshToken;
@@ -361,7 +274,7 @@ router.get('/selected', requireAuth, async (req, res) => {
           .filter(s => s.permissionLevel && s.permissionLevel !== 'siteUnverifiedUser')
           .map(s => s.siteUrl)[0];
         if (first) {
-          await setUserSelection(req.user.id, first);
+          await gscAuth.setUserSelection(req.user.id, first);
           selected = first;
         }
       }
@@ -376,14 +289,14 @@ router.get('/selected', requireAuth, async (req, res) => {
 // POST /api/gsc/selected - set selected property { siteUrl }
 router.post('/selected', requireAuth, async (req, res) => {
   try {
-    const row = await getUserTokens(req.user.id);
+    const row = await gscAuth.getUserTokens(req.user.id);
     if (!row || (!row.accessToken && !row.refreshToken)) {
       return res.status(401).json({ error: 'NotConnected', message: 'Connect Google first' });
     }
     const { siteUrl } = req.body || {};
     if (!siteUrl) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
 
-    const oauth2Client = getOAuth2Client();
+    const oauth2Client = gscAuth.getOAuth2Client();
     const creds = {};
     if (row.accessToken) creds.access_token = row.accessToken;
     if (row.refreshToken) creds.refresh_token = row.refreshToken;
@@ -397,7 +310,7 @@ router.post('/selected', requireAuth, async (req, res) => {
     if (!sites.includes(siteUrl)) {
       return res.status(400).json({ error: 'InvalidProperty', message: 'Property not accessible for this account' });
     }
-    await setUserSelection(req.user.id, siteUrl);
+    await gscAuth.setUserSelection(req.user.id, siteUrl);
     res.json({ success: true, selected: siteUrl });
   } catch (err) {
     logger.error('GSC selected set error:', err.message);
@@ -448,7 +361,7 @@ router.get('/coverage', requireAuth, async (req, res) => {
     const st = getSearchType(req.query.searchType);
     let siteUrl = req.query.siteUrl;
     if (!siteUrl) {
-      siteUrl = await getUserSelection(req.user.id);
+      siteUrl = await gscAuth.getUserSelection(req.user.id);
       if (!siteUrl) {
         return res.json({ success: true, coverage: null });
       }

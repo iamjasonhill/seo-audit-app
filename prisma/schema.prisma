@@ -194,3 +194,30 @@ model GscUserSelection {
 
   @@map("gsc_user_selection")
 }
+
+// Properties a user has opted-in for background syncing
+model GscUserProperty {
+  id               String   @id @default(cuid())
+  userId           Int      @map("user_id")
+  siteUrl          String   @map("site_url")
+  enabled          Boolean  @default(true)
+  priorityOrder    Int      @default(0) @map("priority_order")
+  syncIntervalHours Int     @default(24) @map("sync_interval_hours")
+  lastFullSyncAt   DateTime? @map("last_full_sync_at")
+  nextSyncDueAt    DateTime? @map("next_sync_due_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, siteUrl], map: "uniq_user_property")
+  @@index([nextSyncDueAt, priorityOrder], map: "idx_due_order")
+  @@map("gsc_user_properties")
+}
+
+// Cooperative lock to ensure only one scheduler processes at a time
+model GscSyncLock {
+  id          String   @id
+  lockedUntil DateTime? @map("locked_until")
+  lockedBy    String?  @map("locked_by")
+
+  @@map("gsc_sync_lock")
+}

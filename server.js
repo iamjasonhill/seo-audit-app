@@ -12,6 +12,7 @@ const rateLimiter = require('./src/middleware/rateLimiter');
 const gscRateLimiter = require('./src/middleware/gscRateLimiter');
 const errorHandler = require('./src/middleware/errorHandler');
 const databaseService = require('./src/services/database');
+const gscScheduler = require('./src/services/gscScheduler');
 
 // Import routes
 const auditRoutes = require('./src/routes/audit');
@@ -117,6 +118,10 @@ app.listen(PORT, async () => {
   try {
     await databaseService.connect();
     logger.info('Database connection established');
+    if (process.env.SCHEDULER_ENABLED === 'true') {
+      gscScheduler.start(60000);
+      logger.info('GSC Scheduler enabled');
+    }
   } catch (error) {
     logger.error('Failed to connect to database:', error);
     // Don't exit the process, but log the error
