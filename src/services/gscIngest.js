@@ -166,7 +166,7 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
     logger.info(`GSC backfill start site=${siteUrl} type=${searchType} days=${rangeDays.length}`);
     await updateSync(siteUrl, 'totals', searchType, 'running', null, null);
 
-    // Totals by date in one or few calls (not per-day loop) using dimensions ['date'] over the full range
+    // Totals
     try {
       const totalsRows = await querySa(webmasters, siteUrl, {
         startDate: formatDate(start),
@@ -183,7 +183,7 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
       throw e;
     }
 
-    // Helper to run per-dimension
+    // Helper to run per-dimension (date + dimension)
     const runDim = async (dimension, keyName, model) => {
       await updateSync(siteUrl, dimension, searchType, 'running', null, null);
       try {
@@ -207,7 +207,55 @@ async function backfillProperty(oauth2Client, siteUrl, options = {}) {
     await runDim('query', 'query', 'gscQueriesDaily');
     await runDim('device', 'device', 'gscDeviceDaily');
     await runDim('country', 'country', 'gscCountryDaily');
-    await runDim('searchAppearance', 'appearance', 'gscAppearanceDaily');
+
+    // Appearance: fetch without date (API restriction) and store as aggregated range
+    await updateSync(siteUrl, 'searchAppearance', searchType, 'running', null, null);
+    try {
+      const appearanceRows = await querySa(webmasters, siteUrl, {
+        startDate: formatDate(start),
+        endDate: formatDate(end),
+        searchType,
+        dataState: 'all',
+        dimensions: ['searchAppearance'],
+        rowLimit: 25000,
+      });
+      for (const r of appearanceRows) {
+        const appearance = r.keys?.[0];
+        if (!appearance) continue;
+        const data = {
+          siteUrl,
+          searchType,
+          appearance,
+          startDate: parseIsoDate(formatDate(start)),
+          endDate: parseIsoDate(formatDate(end)),
+          clicks: Math.round(r.clicks || 0),
+          impressions: Math.round(r.impressions || 0),
+          ctr: Number(r.ctr || 0),
+          position: Number(r.position || 0),
+        };
+        await databaseService.prisma.gscAppearanceRange.upsert({
+          where: {
+            siteUrl_searchType_appearance_startDate_endDate: {
+              siteUrl: data.siteUrl,
+              searchType: data.searchType,
+              appearance: data.appearance,
+              startDate: data.startDate,
+              endDate: data.endDate,
+            }
+          },
+          update: {
+            clicks: data.clicks,
+            impressions: data.impressions,
+            ctr: data.ctr,
+            position: data.position,
+          },
+          create: data,
+        });
+      }
+      await updateSync(siteUrl, 'searchAppearance', searchType, 'ok', null, end);
+    } catch (e) {
+      await updateSync(siteUrl, 'searchAppearance', searchType, 'error', e.message, null);
+    }
 
     logger.info(`GSC backfill done site=${siteUrl} type=${searchType}`);
   }

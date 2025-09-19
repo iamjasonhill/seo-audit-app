@@ -156,17 +156,18 @@ model GscCountryDaily {
   @@map("gsc_country_daily")
 }
 
-model GscAppearanceDaily {
+model GscAppearanceRange {
   siteUrl    String   @map("site_url")
-  date       DateTime @map("date")
   searchType String   @map("search_type")
   appearance String
+  startDate  DateTime @map("start_date")
+  endDate    DateTime @map("end_date")
   clicks     Int
   impressions Int
   ctr        Float
   position   Float
 
-  @@id([siteUrl, date, searchType, appearance])
-  @@index([siteUrl, date, appearance], map: "idx_gsc_appearance_daily_site_date_appearance")
-  @@map("gsc_appearance_daily")
+  @@id([siteUrl, searchType, appearance, startDate, endDate])
+  @@index([siteUrl, startDate, endDate], map: "idx_gsc_appearance_range_site_period")
+  @@map("gsc_appearance_range")
 }
