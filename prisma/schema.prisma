@@ -171,3 +171,26 @@ model GscAppearanceRange {
   @@index([siteUrl, startDate, endDate], map: "idx_gsc_appearance_range_site_period")
   @@map("gsc_appearance_range")
 }
+
+// Persisted OAuth tokens and user selection for GSC
+model GscOAuthToken {
+  userId       Int      @id @map("user_id")
+  accessToken  String?  @map("access_token")
+  refreshToken String?  @map("refresh_token")
+  scope        String?  @map("scope")
+  tokenType    String?  @map("token_type")
+  expiryDate   DateTime? @map("expiry_date")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("gsc_oauth_token")
+}
+
+model GscUserSelection {
+  userId    Int      @id @map("user_id")
+  siteUrl   String   @map("site_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("gsc_user_selection")
+}

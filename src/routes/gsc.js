@@ -1,14 +1,53 @@
 const express = require('express');
 const { google } = require('googleapis');
 const gscIngest = require('../services/gscIngest');
+const databaseService = require('../services/database');
 const { requireAuth } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
-// In-memory stores (replace with DB persistence later)
-const userIdToGscTokens = new Map();
-const userIdToSelectedProperty = new Map();
+// Helper: load and persist tokens & selection in DB
+async function getUserTokens(userId) {
+  try {
+    const row = await databaseService.prisma.gscOAuthToken.findUnique({ where: { userId } });
+    return row || null;
+  } catch (_) { return null; }
+}
+
+async function saveUserTokens(userId, tokens) {
+  const existing = await databaseService.prisma.gscOAuthToken.findUnique({ where: { userId } }).catch(()=>null);
+  const refreshToken = tokens.refresh_token || existing?.refreshToken || null;
+  const expiryDate = tokens.expiry_date ? new Date(tokens.expiry_date) : (existing?.expiryDate || null);
+  const data = {
+    userId,
+    accessToken: tokens.access_token || null,
+    refreshToken,
+    scope: tokens.scope || existing?.scope || null,
+    tokenType: tokens.token_type || existing?.tokenType || null,
+    expiryDate,
+  };
+  await databaseService.prisma.gscOAuthToken.upsert({
+    where: { userId },
+    update: data,
+    create: data,
+  });
+}
+
+async function getUserSelection(userId) {
+  try {
+    const row = await databaseService.prisma.gscUserSelection.findUnique({ where: { userId } });
+    return row?.siteUrl || null;
+  } catch (_) { return null; }
+}
+
+async function setUserSelection(userId, siteUrl) {
+  await databaseService.prisma.gscUserSelection.upsert({
+    where: { userId },
+    update: { siteUrl },
+    create: { userId, siteUrl },
+  });
+}
 
 const getOAuth2Client = () => {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
@@ -20,10 +59,10 @@ const getOAuth2Client = () => {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 };
 
-const ensureGscContext = (req) => {
-  const tokens = userIdToGscTokens.get(req.user.id);
-  const selected = userIdToSelectedProperty.get(req.user.id);
-  if (!tokens) {
+const ensureGscContext = async (req) => {
+  const row = await getUserTokens(req.user.id);
+  const selected = await getUserSelection(req.user.id);
+  if (!row || (!row.accessToken && !row.refreshToken)) {
     const err = new Error('Connect Google first');
     err.status = 401; err.code = 'NotConnected';
     throw err;
@@ -34,7 +73,14 @@ const ensureGscContext = (req) => {
     throw err;
   }
   const oauth2Client = getOAuth2Client();
-  oauth2Client.setCredentials(tokens);
+  const creds = {};
+  if (row.accessToken) creds.access_token = row.accessToken;
+  if (row.refreshToken) creds.refresh_token = row.refreshToken;
+  if (row.expiryDate) creds.expiry_date = new Date(row.expiryDate).getTime();
+  oauth2Client.setCredentials(creds);
+  oauth2Client.on('tokens', async (t) => {
+    try { await saveUserTokens(req.user.id, t); } catch (_) {}
+  });
   return { oauth2Client, selected };
 };
 
@@ -102,16 +148,9 @@ router.get('/callback', async (req, res) => {
 // POST /api/gsc/url/inspect { url }
 router.post('/url/inspect', requireAuth, async (req, res) => {
   try {
-    const tokens = userIdToGscTokens.get(req.user.id);
-    if (!tokens) return res.status(401).json({ error: 'NotConnected', message: 'Connect Google first' });
-    const selected = userIdToSelectedProperty.get(req.user.id);
-    if (!selected) return res.status(400).json({ error: 'NoProperty', message: 'Select a property first' });
-
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const { url } = req.body || {};
     if (!url) return res.status(400).json({ error: 'BadRequest', message: 'url is required' });
-
-    const oauth2Client = getOAuth2Client();
-    oauth2Client.setCredentials(tokens);
     const searchconsole = google.searchconsole({ version: 'v1', auth: oauth2Client });
 
     // Use URL Inspection API
@@ -139,7 +178,7 @@ router.post('/bind', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'NoTokens', message: 'No OAuth tokens to bind' });
     }
     const tokens = JSON.parse(raw);
-    userIdToGscTokens.set(req.user.id, tokens);
+    await saveUserTokens(req.user.id, tokens);
     res.clearCookie('gsc_tokens');
     res.json({ success: true });
   } catch (err) {
@@ -174,7 +213,7 @@ module.exports = router;
 // GET /api/gsc/selected - get currently selected property
 router.get('/selected', requireAuth, async (req, res) => {
   try {
-    const selected = userIdToSelectedProperty.get(req.user.id) || null;
+    const selected = await getUserSelection(req.user.id);
     res.json({ success: true, selected });
   } catch (err) {
     logger.error('GSC selected get error:', err.message);
@@ -185,13 +224,19 @@ router.get('/selected', requireAuth, async (req, res) => {
 // POST /api/gsc/selected - set selected property { siteUrl }
 router.post('/selected', requireAuth, async (req, res) => {
   try {
-    const tokens = userIdToGscTokens.get(req.user.id);
-    if (!tokens) return res.status(401).json({ error: 'NotConnected', message: 'Connect Google first' });
+    const row = await getUserTokens(req.user.id);
+    if (!row || (!row.accessToken && !row.refreshToken)) {
+      return res.status(401).json({ error: 'NotConnected', message: 'Connect Google first' });
+    }
     const { siteUrl } = req.body || {};
     if (!siteUrl) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
 
     const oauth2Client = getOAuth2Client();
-    oauth2Client.setCredentials(tokens);
+    const creds = {};
+    if (row.accessToken) creds.access_token = row.accessToken;
+    if (row.refreshToken) creds.refresh_token = row.refreshToken;
+    if (row.expiryDate) creds.expiry_date = new Date(row.expiryDate).getTime();
+    oauth2Client.setCredentials(creds);
     const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client });
     const resp = await webmasters.sites.list();
     const sites = (resp.data.siteEntry || [])
@@ -200,7 +245,7 @@ router.post('/selected', requireAuth, async (req, res) => {
     if (!sites.includes(siteUrl)) {
       return res.status(400).json({ error: 'InvalidProperty', message: 'Property not accessible for this account' });
     }
-    userIdToSelectedProperty.set(req.user.id, siteUrl);
+    await setUserSelection(req.user.id, siteUrl);
     res.json({ success: true, selected: siteUrl });
   } catch (err) {
     logger.error('GSC selected set error:', err.message);
@@ -211,7 +256,7 @@ router.post('/selected', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/summary?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
 router.get('/analytics/summary', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
 
     const { startDate, endDate, searchType } = req.query;
     const range = getDefaultRange(startDate, endDate);
@@ -279,7 +324,7 @@ async function runSaQuery(oauth2Client, selected, body) {
 // GET /api/gsc/analytics/pages
 router.get('/analytics/pages', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
@@ -304,7 +349,7 @@ router.get('/analytics/pages', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/queries
 router.get('/analytics/queries', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
@@ -329,7 +374,7 @@ router.get('/analytics/queries', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/page-queries?page=URL
 router.get('/analytics/page-queries', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const { startDate, endDate, page, rowLimit = 1000, startRow = 0, searchType } = req.query;
     if (!page) return res.status(400).json({ error: 'BadRequest', message: 'page is required' });
     const range = getDefaultRange(startDate, endDate);
@@ -358,7 +403,7 @@ router.get('/analytics/page-queries', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/device
 router.get('/analytics/device', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
@@ -383,7 +428,7 @@ router.get('/analytics/device', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/country
 router.get('/analytics/country', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const { startDate, endDate, rowLimit = 250, startRow = 0, searchType } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
@@ -408,7 +453,7 @@ router.get('/analytics/country', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/appearance
 router.get('/analytics/appearance', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
@@ -433,7 +478,7 @@ router.get('/analytics/appearance', requireAuth, async (req, res) => {
 // Sitemaps
 router.get('/sitemaps', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client });
     const resp = await webmasters.sitemaps.list({ siteUrl: selected });
     const sitemaps = (resp.data.sitemap || resp.data.sitemap || resp.data.sitemaps || resp.data)?.sitemap || resp.data?.sitemap || resp.data?.items || [];
@@ -457,7 +502,7 @@ router.get('/sitemaps', requireAuth, async (req, res) => {
 
 router.post('/sitemaps/submit', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = ensureGscContext(req);
+    const { oauth2Client, selected } = await ensureGscContext(req);
     const { sitemapUrl } = req.body || {};
     if (!sitemapUrl) return res.status(400).json({ error: 'BadRequest', message: 'sitemapUrl is required' });
     const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client });
