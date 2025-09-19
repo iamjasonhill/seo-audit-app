@@ -190,6 +190,16 @@
             color: #721c24;
         }
 
+        .prop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: .75rem; }
+        .prop-tile { border: 1px solid #e1e5e9; border-radius: 8px; padding: .75rem 1rem; background:#fff; }
+        .prop-title { font-weight:600; display:flex; align-items:center; gap:.5rem; }
+        .prop-url { font-size:.9rem; margin:.25rem 0; }
+        .prop-muted { color:#666; font-size:.85rem }
+        .cov-badge { display:inline-block; padding:.15rem .45rem; border-radius:999px; font-size:.75rem; border:1px solid #e1e5e9; }
+        .cov-ok { background:#e8f5e9; border-color:#c8e6c9; color:#2e7d32; }
+        .cov-warn { background:#fff8e1; border-color:#ffe082; color:#8a6d3b; }
+        .cov-miss { background:#fdecea; border-color:#f5c6cb; color:#a33; }
+
         .loading {
             text-align: center;
             padding: 2rem;
@@ -985,6 +995,138 @@
                 const listBtn = document.getElementById('listGscPropsBtn');
                 const propsDiv = document.getElementById('gscProperties');
 
+                // Helpers to persist and render saved properties (alphabetical)
+                const sortProps = (arr=[]) => arr.slice().sort((a,b)=> String(a.siteUrl||'').localeCompare(String(b.siteUrl||''), undefined, { sensitivity:'base' }));
+                const getSavedProps = () => {
+                    try { return sortProps(JSON.parse(localStorage.getItem('gscProps')||'[]')); } catch(_) { return []; }
+                };
+                const saveProps = (props=[]) => { try { localStorage.setItem('gscProps', JSON.stringify(sortProps(props))); } catch(_){} };
+                const ensurePropsShell = () => {
+                    if (!propsDiv) return;
+                    if (!propsDiv.dataset.prepared) {
+                        propsDiv.innerHTML = `
+                            <div id="propsSelectorWrap"></div>
+                            <div style="margin-top:.75rem">
+                                <div style="font-weight:600;margin-bottom:.25rem">Saved Properties</div>
+                                <div id="savedProps"></div>
+                            </div>`;
+                        propsDiv.dataset.prepared = '1';
+                    }
+                };
+                const renderSavedProps = async (props) => {
+                    ensurePropsShell();
+                    const list = document.getElementById('savedProps');
+                    if (!list) return;
+                    const items = (props && props.length ? props : getSavedProps());
+                    if (!items.length) { list.innerHTML = '<p>No properties saved yet. Connect and list properties to populate.</p>'; return; }
+
+                    // Group by sc-domain vs url-prefix, and hide URL-prefix when domain exists
+                    const groups = { domain: {}, url: [] };
+                    const getDomainKey = (url) => {
+                        if (!url) return null;
+                        if (url.startsWith('sc-domain:')) return url.replace('sc-domain:','').toLowerCase();
+                        try { const u = new URL(url); return u.hostname.toLowerCase(); } catch (_) { return null; }
+                    };
+                    const domainSet = new Set(items.filter(p=> (p.siteUrl||'').startsWith('sc-domain:')).map(p=> getDomainKey(p.siteUrl)));
+                    items.forEach(p => {
+                        const s = p.siteUrl || '';
+                        if (s.startsWith('sc-domain:')) {
+                            const k = getDomainKey(s); if (!k) return;
+                            if (!groups.domain[k]) groups.domain[k] = { scDomain: s, urls: [] };
+                        } else {
+                            const k = getDomainKey(s);
+                            // If an sc-domain exists for this hostname, treat URL-prefix as subordinate (hidden by default)
+                            const suppressed = domainSet.has(k);
+                            groups.url.push({ url: s, host: k, suppressed });
+                        }
+                    });
+
+                    // Helper to fetch coverage for a site/type
+                    async function getCoverage(siteUrl, type){
+                        try {
+                            const r = await fetch(`/api/gsc/coverage?siteUrl=${encodeURIComponent(siteUrl)}&searchType=${encodeURIComponent(type)}`, { credentials:'include' });
+                            const d = await r.json();
+                            return (r.ok && d.success) ? (d.coverage || null) : null;
+                        } catch(_) { return null; }
+                    }
+                    async function verifyDb(siteUrl, type){
+                        try {
+                            const now = new Date();
+                            const start = new Date(now.getTime() - 27*24*60*60*1000);
+                            const iso = (d)=>d.toISOString().slice(0,10);
+                            const url = `/api/gsc/analytics/summary?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${iso(start)}&endDate=${iso(now)}&searchType=${encodeURIComponent(type)}`;
+                            const r = await fetch(url, { credentials:'include' });
+                            const d = await r.json();
+                            return (r.ok && d.success && d.source === 'db');
+                        } catch(_) { return false; }
+                    }
+
+                    // Build tiles: domains first, then any hosts without sc-domain
+                    const tiles = [];
+                    const renderUrlList = (hostKey) => {
+                        const urls = groups.url.filter(x => x.host === hostKey).map(x => x.url);
+                        if (urls.length === 0) return '';
+                        const id = `urls_${hostKey.replace(/[^a-z0-9]/gi,'_')}`;
+                        return `
+                          <div class="prop-muted" style="margin-top:.35rem">
+                            <a href="#" data-toggle="${id}"><i class="fas fa-list"></i> Show URL-prefix properties (${urls.length})</a>
+                          </div>
+                          <ul id="${id}" style="display:none;margin:.35rem 0 0 .5rem">${urls.map(u=>`<li><a href="/property?site=${encodeURIComponent(u)}" target="_blank">${u}</a></li>`).join('')}</ul>
+                        `;
+                    };
+
+                    // Domain tiles with coverage summary
+                    for (const host of Object.keys(groups.domain).sort()) {
+                        const scd = groups.domain[host].scDomain;
+                        const types = ['web','image','video'];
+                        const covs = await Promise.all(types.map(t => getCoverage(scd, t)));
+                        const dbVerified = await verifyDb(scd, 'web');
+                        const present = covs.filter(c => c && c.start && c.end);
+                        const minStart = present.length ? present.map(c=>c.start).sort()[0] : null;
+                        const maxEnd = present.length ? present.map(c=>c.end).sort().slice(-1)[0] : null;
+                        const badgeClass = (dbVerified && present.length) ? (present.length === types.length ? 'cov-ok' : 'cov-warn') : 'cov-miss';
+                        tiles.push(`
+                          <div class="prop-tile">
+                            <div class="prop-title"><i class="fas fa-globe"></i> sc-domain:${host}</div>
+                            <div class="prop-muted" style="margin:.25rem 0">Saved data <span class="cov-badge ${badgeClass}">${(dbVerified && minStart && maxEnd) ? `${minStart} → ${maxEnd}` : '—'}</span></div>
+                            <div class="prop-url"><a href="/property?site=${encodeURIComponent(scd)}" class="view-audit-btn" target="_blank">Open domain property</a></div>
+                            ${renderUrlList(host)}
+                          </div>
+                        `);
+                    }
+
+                    // Hosts without sc-domain (show each URL as a tile)
+                    const orphanHosts = groups.url.filter(x => !domainSet.has(x.host));
+                    orphanHosts.sort((a,b)=> String(a.url).localeCompare(String(b.url)));
+                    for (const x of orphanHosts) {
+                        const cov = await getCoverage(x.url, 'web');
+                        const dbVerified = await verifyDb(x.url, 'web');
+                        const badgeClass = (dbVerified && cov && cov.start && cov.end) ? 'cov-ok' : 'cov-miss';
+                        tiles.push(`
+                          <div class="prop-tile">
+                            <div class="prop-title"><i class="fas fa-link"></i> URL property</div>
+                            <div class="prop-muted" style="margin:.25rem 0">Saved data <span class="cov-badge ${badgeClass}">${(dbVerified && cov) ? `${cov.start} → ${cov.end}` : '—'}</span></div>
+                            <div class="prop-url"><a href="/property?site=${encodeURIComponent(x.url)}" class="view-audit-btn" target="_blank">${x.url}</a></div>
+                          </div>
+                        `);
+                    }
+
+                    list.innerHTML = `<div class="prop-grid">${tiles.join('')}</div>`;
+                    // Bind toggles
+                    list.querySelectorAll('[data-toggle]').forEach(a => {
+                        a.addEventListener('click', (e)=>{
+                            e.preventDefault();
+                            const id = a.getAttribute('data-toggle');
+                            const el = document.getElementById(id); if (!el) return;
+                            const showing = el.style.display !== 'none';
+                            el.style.display = showing ? 'none' : '';
+                            a.innerHTML = showing ? '<i class="fas fa-list"></i> Show URL-prefix properties' : '<i class="fas fa-list"></i> Hide URL-prefix properties';
+                        });
+                    });
+                };
+                // Render any previously saved list immediately
+                renderSavedProps();
+
                 if (connectBtn) {
                     connectBtn.addEventListener('click', async () => {
                         connectBtn.disabled = true;
@@ -1027,20 +1169,25 @@
                             const resp = await fetch('/api/gsc/properties', { credentials: 'include' });
                             const data = await resp.json();
                             if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load properties');
-                            if (!data.properties || data.properties.length === 0) {
-                                propsDiv.innerHTML = '<p>No verified properties found for this account.</p>';
+                            const properties = sortProps(data.properties || []);
+                            if (!properties || properties.length === 0) {
+                                ensurePropsShell();
+                                const wrap = document.getElementById('propsSelectorWrap');
+                                if (wrap) wrap.innerHTML = '<p>No verified properties found for this account.</p>';
                             } else {
+                                saveProps(properties);
+                                ensurePropsShell();
                                 const selectorId = 'gscPropertySelect';
-                                const options = data.properties.map(p => `<option value="${p.siteUrl}">${p.siteUrl}</option>`).join('');
-                                propsDiv.innerHTML = `
+                                const options = properties.map(p => `<option value="${p.siteUrl}">${p.siteUrl}</option>`).join('');
+                                const wrap = document.getElementById('propsSelectorWrap');
+                                if (wrap) wrap.innerHTML = `
                                     <div style="margin:.5rem 0">
                                         <label for="${selectorId}" style="display:block;margin-bottom:.25rem;font-weight:500">Active Property</label>
                                         <select id="${selectorId}" style="padding:.5rem;border:1px solid #e1e5e9;border-radius:6px;min-width:320px">${options}</select>
                                         <button id="saveGscSelection" class="audit-btn" style="width:auto;margin-left:.5rem"><i class="fas fa-save"></i> Save</button>
                                         <a id="openProperty" class="audit-btn" style="width:auto;margin-left:.5rem;background:#198754" target="_blank"><i class="fas fa-arrow-up-right-from-square"></i> Open</a>
                                     </div>
-                                    <div id="gscKpis" style="margin-top:.5rem"></div>
-                                `;
+                                    <div id="gscKpis" style="margin-top:.5rem"></div>`;
                                 // Preselect
                                 const sel = document.getElementById(selectorId);
                                 if (selectedSite) sel.value = selectedSite;
@@ -1076,6 +1223,8 @@
                                 });
                                 // Load KPIs if selection exists
                                 await this.loadGscKpis();
+                                // Update saved properties list
+                                renderSavedProps(properties);
                             }
                         } catch (err) {
                             propsDiv.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
