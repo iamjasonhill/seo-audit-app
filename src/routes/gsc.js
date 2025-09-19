@@ -1,5 +1,6 @@
 const express = require('express');
 const { google } = require('googleapis');
+const gscIngest = require('../services/gscIngest');
 const { requireAuth } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
@@ -466,6 +467,44 @@ router.post('/sitemaps/submit', requireAuth, async (req, res) => {
     const apiMsg = err?.response?.data?.error?.message;
     logger.error('GSC sitemaps submit error:', apiMsg || err.message);
     res.status(err.status || 500).json({ error: 'SitemapsSubmitError', message: apiMsg || err.message });
+  }
+});
+
+// POST /api/gsc/backfill { startDate?, endDate?, searchTypes? }
+router.post('/backfill', requireAuth, async (req, res) => {
+  try {
+    const { oauth2Client, selected } = ensureGscContext(req);
+    const { startDate, endDate, searchTypes } = req.body || {};
+
+    await gscIngest.backfillProperty(oauth2Client, selected, {
+      startDate,
+      endDate,
+      searchTypes: Array.isArray(searchTypes) && searchTypes.length
+        ? searchTypes
+        : ['web', 'image', 'video']
+    });
+
+    res.json({ success: true, message: 'Backfill completed' });
+  } catch (err) {
+    const apiMsg = err?.response?.data?.error?.message;
+    logger.error('GSC backfill error:', apiMsg || err.message);
+    res.status(500).json({ error: 'BackfillError', message: apiMsg || err.message });
+  }
+});
+
+// GET /api/gsc/sync-status?siteUrl=...
+router.get('/sync-status', requireAuth, async (req, res) => {
+  try {
+    let siteUrl = req.query.siteUrl;
+    if (!siteUrl) {
+      const { selected } = ensureGscContext(req);
+      siteUrl = selected;
+    }
+    const rows = await gscIngest.getSyncStatus(siteUrl);
+    res.json({ success: true, siteUrl, status: rows });
+  } catch (err) {
+    logger.error('GSC sync-status error:', err.message);
+    res.status(500).json({ error: 'SyncStatusError', message: err.message });
   }
 });
 

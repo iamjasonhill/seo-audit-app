@@ -58,3 +58,115 @@ model AuditComparison {
 
   @@map("audit_comparisons")
 }
+
+// Google Search Console persistent storage (last ~16 months)
+
+model GscProperty {
+  siteUrl   String   @id @map("site_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("gsc_property")
+}
+
+model GscSyncStatus {
+  id              String   @id @default(cuid())
+  siteUrl         String   @map("site_url")
+  searchType      String   @map("search_type")
+  dimension       String   @map("dimension") // totals, page, query, device, country, appearance
+  lastSyncedDate  DateTime? @map("last_synced_date")
+  lastRunAt       DateTime? @map("last_run_at")
+  status          String?  // ok, running, error
+  message         String?
+
+  @@index([siteUrl, searchType, dimension], map: "idx_gsc_sync_status")
+  @@map("gsc_sync_status")
+}
+
+model GscTotalsDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType])
+  @@index([siteUrl, date], map: "idx_gsc_totals_daily_site_date")
+  @@map("gsc_totals_daily")
+}
+
+model GscPagesDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  page       String
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType, page])
+  @@index([siteUrl, date, page], map: "idx_gsc_pages_daily_site_date_page")
+  @@map("gsc_pages_daily")
+}
+
+model GscQueriesDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  query      String
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType, query])
+  @@index([siteUrl, date, query], map: "idx_gsc_queries_daily_site_date_query")
+  @@map("gsc_queries_daily")
+}
+
+model GscDeviceDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  device     String
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType, device])
+  @@index([siteUrl, date, device], map: "idx_gsc_device_daily_site_date_device")
+  @@map("gsc_device_daily")
+}
+
+model GscCountryDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  country    String
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType, country])
+  @@index([siteUrl, date, country], map: "idx_gsc_country_daily_site_date_country")
+  @@map("gsc_country_daily")
+}
+
+model GscAppearanceDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  appearance String
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType, appearance])
+  @@index([siteUrl, date, appearance], map: "idx_gsc_appearance_daily_site_date_appearance")
+  @@map("gsc_appearance_daily")
+}

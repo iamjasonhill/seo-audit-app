@@ -213,6 +213,47 @@
       // Initialize URL Inspection and Sitemaps panels
       initPropUrlInspection();
       initPropSitemaps();
+
+      // Backfill button and sync status
+      const backfillBtn = document.getElementById('backfillBtn');
+      const backfillMsg = document.getElementById('backfillMsg');
+      const syncStatus = document.getElementById('syncStatus');
+      async function loadSync() {
+        try {
+          const r = await fetch(`/api/gsc/sync-status?siteUrl=${encodeURIComponent(site)}`, { credentials:'include' });
+          const d = await r.json();
+          if (!r.ok || !d.success) throw new Error(d.message||'Failed to load sync status');
+          const rows = d.status || [];
+          if (!rows.length) { syncStatus.textContent = 'No sync activity yet.'; return; }
+          const fmt = (s) => s ? new Date(s).toLocaleString(undefined,{ dateStyle:'short', timeStyle:'short' }) : '—';
+          const html = `<table class="history-table"><thead><tr><th>Dimension</th><th>Type</th><th>Last Synced</th><th>Status</th><th>Updated</th></tr></thead><tbody>
+            ${rows.map(r=>`<tr><td>${r.dimension}</td><td>${r.searchType}</td><td>${fmt(r.lastSyncedDate)}</td><td>${r.status||'—'}</td><td>${fmt(r.lastRunAt)}</td></tr>`).join('')}
+          </tbody></table>`;
+          syncStatus.innerHTML = html;
+        } catch(e) {
+          syncStatus.textContent = e.message;
+        }
+      }
+      if (backfillBtn) backfillBtn.addEventListener('click', async () => {
+        backfillMsg.style.color = '#666';
+        backfillMsg.textContent = 'Starting backfill… this may take a while.';
+        backfillBtn.disabled = true;
+        const orig = backfillBtn.innerHTML; backfillBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Backfilling…';
+        try {
+          const resp = await fetch('/api/gsc/backfill', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ searchTypes: ['web','image','video'] }) });
+          const data = await resp.json();
+          if (!resp.ok || !data.success) throw new Error(data.message||'Backfill failed');
+          backfillMsg.style.color = '#155724';
+          backfillMsg.textContent = 'Backfill completed.';
+        } catch(e) {
+          backfillMsg.style.color = '#c33';
+          backfillMsg.textContent = e.message;
+        } finally {
+          backfillBtn.disabled = false; backfillBtn.innerHTML = orig; loadSync();
+        }
+      });
+      // Initial sync status load
+      loadSync();
     }
 
     document.addEventListener('DOMContentLoaded', initPropertyPage);
@@ -270,6 +311,15 @@
         <button class="audit-btn" id="tDiscover" style="background:#6c757d">Discover</button>
       </div>
       <div id="kpis"></div>
+    </div>
+
+    <div class="card" id="syncCard">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-database"></i> Data Sync</h3>
+      <div class="controls">
+        <button id="backfillBtn" class="audit-btn" style="background:#0d6efd"><i class="fas fa-cloud-download-alt"></i> Backfill last 16 months</button>
+        <span id="backfillMsg" class="muted"></span>
+      </div>
+      <div id="syncStatus" class="muted">No sync activity yet.</div>
     </div>
 
     <div class="card">
