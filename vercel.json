@@ -12,6 +12,9 @@
       "dest": "server.js"
     }
   ],
+  "crons": [
+    { "path": "/api/gsc/scheduler/tick", "schedule": "*/1 * * * *" }
+  ],
   "env": {
     "NODE_ENV": "production"
   }

@@ -362,13 +362,17 @@ router.get('/analytics/summary', requireAuth, async (req, res) => {
     const { startDate, endDate, searchType } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
-    // Prefer DB if coverage is sufficient for endDate
-    const covered = await isCovered(selected, st, 'totals', range.endDate);
-    if (covered) {
-      const { totals, daily } = await getSummaryFromDb(selected, st, range);
-      const coverage = await getCoverageFromDb(selected, st);
-      return res.json({ success: true, property: selected, totals, daily, source: 'db', coverage });
+    // Prefer DB whenever coverage overlaps the requested range.
+    const coverage = await getCoverageFromDb(selected, st);
+    if (coverage && coverage.start && coverage.end) {
+      const effEnd = (new Date(coverage.end) < new Date(range.endDate)) ? coverage.end : range.endDate;
+      if (new Date(effEnd) >= new Date(range.startDate)) {
+        const effRange = { startDate: range.startDate, endDate: effEnd };
+        const { totals, daily } = await getSummaryFromDb(selected, st, effRange);
+        return res.json({ success: true, property: selected, totals, daily, source: 'db', coverage });
+      }
     }
+    // If DB-only mode, do not call Google
     // DB-only mode: do not call Google live
     if (process.env.GSC_DB_ONLY === 'true') {
       return respondNotReady(req, res, selected, st);
@@ -654,6 +658,17 @@ router.get('/sync-status', requireAuth, async (req, res) => {
   } catch (err) {
     logger.error('GSC sync-status error:', err.message);
     res.status(500).json({ error: 'SyncStatusError', message: err.message });
+  }
+});
+
+// Scheduler tick endpoint (stateless) – safe to call from Vercel Cron
+router.get('/scheduler/tick', async (req, res) => {
+  try {
+    await gscScheduler.tick();
+    res.json({ success: true, message: 'Tick executed' });
+  } catch (err) {
+    logger.error('Scheduler tick error:', err.message);
+    res.status(500).json({ error: 'SchedulerTickError', message: err.message });
   }
 });
 
