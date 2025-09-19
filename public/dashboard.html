@@ -322,6 +322,14 @@
             </div>
 
             <div class="card">
+                <h2><i class="fas fa-database"></i> Sync Registry</h2>
+                <div style="margin:.25rem 0 .5rem 0">
+                    <button id="syncRegRefresh" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-rotate"></i> Refresh</button>
+                </div>
+                <div id="syncRegistry"></div>
+            </div>
+
+            <div class="card">
                 <h2><i class="fas fa-search"></i> New Audit</h2>
                 <form id="auditForm" class="audit-form">
                     <div class="form-group">
@@ -452,6 +460,7 @@
                 this.initSitemaps(); // Initialize sitemaps
                 
                 this.init();
+                this.loadSyncRegistry();
 
                 // Clear any autofilled values shortly after load
                 setTimeout(() => {
@@ -637,6 +646,57 @@
                 if (deviceBtn) deviceBtn.addEventListener('click', () => { setActive(deviceBtn); startRow = 0; load('/api/gsc/analytics/device', 'device'); });
                 if (countryBtn) countryBtn.addEventListener('click', () => { setActive(countryBtn); startRow = 0; load('/api/gsc/analytics/country', 'country'); });
                 if (appearanceBtn) appearanceBtn.addEventListener('click', () => { setActive(appearanceBtn); startRow = 0; load('/api/gsc/analytics/appearance', 'appearance'); });
+            }
+
+            async loadSyncRegistry() {
+                const host = document.getElementById('syncRegistry');
+                if (!host) return;
+                host.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading registry…</p>';
+                try {
+                    const resp = await fetch('/api/gsc/sync/properties', { credentials:'include' });
+                    const data = await resp.json();
+                    if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load');
+                    const rows = (data.properties||[]).sort((a,b)=> (a.priorityOrder||0)-(b.priorityOrder||0));
+                    if (!rows.length) { host.innerHTML = '<p>No properties registered yet. Click “List Properties” above to register all.</p>'; return; }
+                    const fmt = (d)=> d ? new Date(d).toLocaleString(undefined,{dateStyle:'short',timeStyle:'short'}) : '—';
+                    const link = (site)=> site.startsWith('sc-domain:') ? `/property?site=${encodeURIComponent(site)}` : `/property?site=${encodeURIComponent(site)}`;
+                    const table = `
+                        <table class="history-table">
+                          <thead><tr><th>#</th><th>Property</th><th>Enabled</th><th>Last Full Sync</th><th>Next Due</th><th>Actions</th></tr></thead>
+                          <tbody>
+                          ${rows.map(r=>`
+                            <tr>
+                              <td>${r.priorityOrder ?? 0}</td>
+                              <td><a class="view-audit-btn" href="${link(r.siteUrl)}" target="_blank">${r.siteUrl}</a></td>
+                              <td>${r.enabled ? 'Yes' : 'No'}</td>
+                              <td>${fmt(r.lastFullSyncAt)}</td>
+                              <td>${fmt(r.nextSyncDueAt)}</td>
+                              <td>
+                                <button class="audit-btn" data-sync-now="${encodeURIComponent(r.siteUrl)}" style="width:auto;background:#198754"><i class="fas fa-forward"></i> Sync now</button>
+                              </td>
+                            </tr>`).join('')}
+                          </tbody>
+                        </table>
+                    `;
+                    host.innerHTML = table;
+                    host.querySelectorAll('[data-sync-now]').forEach(btn => {
+                        btn.addEventListener('click', async (e)=>{
+                            const siteUrl = decodeURIComponent(btn.getAttribute('data-sync-now')||'');
+                            btn.disabled = true; const orig = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Queuing…';
+                            try {
+                                const r = await fetch('/api/gsc/sync/register', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ siteUrl, enabled:true }) });
+                                const d = await r.json(); if (!r.ok || !d.success) throw new Error(d.message||'Failed');
+                                await this.loadSyncRegistry();
+                                this.showSuccess('Queued sync for '+siteUrl);
+                            } catch(err) { this.showError(err.message); }
+                            finally { btn.disabled=false; btn.innerHTML = orig; }
+                        });
+                    });
+                } catch (err) {
+                    host.innerHTML = `<p style=\"color:#c33\">${err.message}</p>`;
+                }
+                const refresh = document.getElementById('syncRegRefresh');
+                if (refresh) refresh.onclick = ()=> this.loadSyncRegistry();
             }
 
             // Sitemaps panel
