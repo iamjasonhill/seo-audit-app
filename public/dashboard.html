@@ -1085,6 +1085,9 @@
                         }
                     });
                 }
+
+                // Auto-list properties on load to avoid manual console steps
+                setTimeout(() => { if (listBtn && !propsDiv.innerHTML) listBtn.click(); }, 400);
             }
 
             async loadGscKpis() {
