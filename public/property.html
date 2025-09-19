@@ -238,6 +238,27 @@
       initPropUrlInspection();
       initPropSitemaps();
 
+      // Hide Data Sync card once initial 16 months coverage is complete
+      async function hideSyncCardIfComplete() {
+        const card = document.getElementById('syncCard');
+        if (!card) return;
+        try {
+          const types = ['web','image','video'];
+          const results = await Promise.all(types.map(t =>
+            fetch(`/api/gsc/coverage?searchType=${encodeURIComponent(t)}`, { credentials:'include' })
+              .then(r=>r.json()).catch(()=>({}))
+          ));
+          const complete = results.every(x => {
+            const cov = x && x.coverage; if (!cov || !cov.start || !cov.end) return false;
+            const sd = new Date(cov.start + 'T00:00:00Z');
+            const ed = new Date(cov.end + 'T00:00:00Z');
+            const days = Math.round((ed - sd) / (24*60*60*1000));
+            return days >= 475; // ~16 months
+          });
+          if (complete) card.style.display = 'none';
+        } catch (_) { /* ignore */ }
+      }
+
       // Backfill button and sync status
       const backfillBtn = document.getElementById('backfillBtn');
       const backfillMsg = document.getElementById('backfillMsg');
@@ -257,6 +278,8 @@
         } catch(e) {
           syncStatus.textContent = e.message;
         }
+        // After every refresh of sync status, check if we can hide the card
+        hideSyncCardIfComplete();
       }
       if (backfillBtn) backfillBtn.addEventListener('click', async () => {
         backfillMsg.style.color = '#666';
@@ -278,6 +301,8 @@
       });
       // Initial sync status load
       loadSync();
+      // Also check on initial page load
+      hideSyncCardIfComplete();
     }
 
     document.addEventListener('DOMContentLoaded', initPropertyPage);
