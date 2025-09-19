@@ -261,7 +261,25 @@ router.get('/properties', requireAuth, async (req, res) => {
     const resp = await webmasters.sites.list();
     const sites = (resp.data.siteEntry || [])
       .filter(s => s.permissionLevel && s.permissionLevel !== 'siteUnverifiedUser')
-      .map(s => ({ siteUrl: s.siteUrl, permissionLevel: s.permissionLevel }));
+      .map(s => ({ siteUrl: s.siteUrl, permissionLevel: s.permissionLevel }))
+      .sort((a,b)=> String(a.siteUrl).localeCompare(String(b.siteUrl), undefined, { sensitivity:'base' }));
+
+    // Auto-register all listed properties for background syncing (create if missing)
+    try {
+      const now = new Date();
+      for (let i=0;i<sites.length;i++) {
+        const s = sites[i];
+        const exists = await databaseService.prisma.gscUserProperty.findUnique({ where: { userId_siteUrl: { userId: req.user.id, siteUrl: s.siteUrl } } });
+        if (!exists) {
+          await databaseService.prisma.gscUserProperty.create({ data: { userId: req.user.id, siteUrl: s.siteUrl, enabled: true, priorityOrder: i, syncIntervalHours: 24, nextSyncDueAt: now } });
+        } else if (exists.priorityOrder !== i) {
+          // Update priority to alphabetical index but avoid rescheduling
+          await databaseService.prisma.gscUserProperty.update({ where: { id: exists.id }, data: { priorityOrder: i } });
+        }
+      }
+    } catch (e) {
+      logger.warn('Auto-register properties failed:', e.message);
+    }
     res.json({ success: true, properties: sites });
   } catch (err) {
     logger.error('GSC properties error:', err.message);
