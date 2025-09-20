@@ -51,10 +51,20 @@ router.get('/callback', async (req, res) => {
     }
 
     // Only allow existing active users; update profile but don't auto-create new ones
-    const existing = await databaseService.prisma.user.findUnique({ where: { email } });
-    if (!existing || existing.status !== 'active') {
-      logger.warn('Login blocked for non-registered or inactive user:', email);
-      return res.status(401).json({ error: 'Unauthorized', message: 'This account is not enabled. Contact the administrator.' });
+    let existing = await databaseService.prisma.user.findUnique({ where: { email } });
+    if (!existing) {
+      const count = await databaseService.prisma.user.count();
+      if (count === 0) {
+        // Bootstrap: first user becomes admin and is active
+        existing = await databaseService.prisma.user.create({ data: { email, name: info?.data?.name || null, picture: info?.data?.picture || null, role: 'admin', status: 'active' } });
+      } else {
+        logger.warn('Login blocked for non-registered user:', email);
+        return res.status(401).json({ error: 'Unauthorized', message: 'This account is not enabled. Contact the administrator.' });
+      }
+    }
+    if (existing.status !== 'active') {
+      logger.warn('Login blocked for inactive user:', email);
+      return res.status(401).json({ error: 'Unauthorized', message: 'This account is disabled.' });
     }
     const name = info?.data?.name || existing.name || null;
     const picture = info?.data?.picture || existing.picture || null;
