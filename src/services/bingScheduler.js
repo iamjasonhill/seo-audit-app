@@ -70,8 +70,8 @@ async function computeWindow(siteUrl, searchType) {
   const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()-2));
   const cov = await getCoverageFromDb(siteUrl, searchType);
   if (!cov.start || !cov.end) {
-    // No coverage yet: start with 30 days backfill to avoid overwhelming the API
-    const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()-30));
+    // No coverage yet: start with 7 days backfill (weekly chunks)
+    const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()-7));
     return { startDate: iso(start), endDate: iso(end), historic: true };
   }
   if (cov.end >= end) return null; // up to date
@@ -143,38 +143,7 @@ class BingScheduler {
     try {
       const bingApi = await ensureBingApiClient(userId);
 
-      // Check if this is a first-time sync (no previous sync)
-      const isFirstSync = !prop.last_full_sync_at;
-      
-      if (isFirstSync) {
-        logger.info(`Bing Scheduler: First sync detected for ${siteUrl}, performing full 24-month backfill`);
-        
-        // Perform full backfill for first sync
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setMonth(startDate.getMonth() - 24);
-        
-        try {
-          const results = await bingIngest.backfillSite(siteUrl, 'web', 24);
-          logger.info(`Bing Scheduler: Completed 24-month backfill for ${siteUrl} - ${JSON.stringify(results)}`);
-        } catch (error) {
-          logger.error(`Bing Scheduler: Error during backfill for ${siteUrl}:`, error.message);
-          throw error;
-        }
-        
-        // Schedule next sync in regular interval
-        const next = new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000);
-        await databaseService.prisma.$executeRawUnsafe(`
-          UPDATE bing_user_property 
-          SET last_full_sync_at = NOW(), next_sync_due_at = $1, updated_at = NOW()
-          WHERE id = $2
-        `, next, prop.id);
-        
-        logger.info(`Bing Scheduler: ${siteUrl} backfill complete, next sync scheduled for ${next.toISOString()}`);
-        return;
-      }
-
-      // Regular sync for subsequent runs
+      // Decide ranges per type (like GSC scheduler)
       const tasks = [];
       for (const st of SEARCH_TYPES) {
         const win = await computeWindow(siteUrl, st);
@@ -193,34 +162,74 @@ class BingScheduler {
         return;
       }
 
-      // Process each task (search type) separately to avoid overwhelming the API
-      for (const task of tasks) {
+      // Merge to a single window spanning min start/max end across required types
+      const minStart = tasks.reduce((d, t) => d && d < new Date(t.startDate) ? d : new Date(t.startDate), null) || new Date(tasks[0].startDate);
+      const maxEnd = tasks.reduce((d, t) => d && d > new Date(t.endDate) ? d : new Date(t.endDate), null) || new Date(tasks[0].endDate);
+      const searchTypes = tasks.map(t => t.st);
+
+      // Process in weekly chunks to avoid timeouts
+      const chunkSizeDays = 7;
+      const totalDays = Math.ceil((maxEnd - minStart) / (1000 * 60 * 60 * 24));
+      const totalChunks = Math.ceil(totalDays / chunkSizeDays);
+      
+      logger.info(`Bing Scheduler: Processing ${totalChunks} weekly chunks for ${siteUrl} (${totalDays} days total)`);
+      
+      let processedChunks = 0;
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 3;
+      
+      for (let chunk = 0; chunk < totalChunks; chunk++) {
+        const chunkStart = new Date(minStart);
+        chunkStart.setDate(minStart.getDate() + (chunk * chunkSizeDays));
+        
+        const chunkEnd = new Date(chunkStart);
+        chunkEnd.setDate(chunkStart.getDate() + chunkSizeDays - 1);
+        
+        // Don't go beyond the max end date
+        if (chunkEnd > maxEnd) {
+          chunkEnd.setTime(maxEnd.getTime());
+        }
+        
+        logger.info(`Bing Scheduler: Processing chunk ${chunk + 1}/${totalChunks} for ${siteUrl} (${iso(chunkStart)} to ${iso(chunkEnd)})`);
+        
         try {
-          logger.info(`Bing Scheduler: processing ${siteUrl} (${task.st}) from ${task.startDate} to ${task.endDate}`);
-          
-          // Calculate days to process
-          const startDate = new Date(task.startDate);
-          const endDate = new Date(task.endDate);
-          const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
-          
-          // Limit to 30 days per sync to avoid API timeouts
-          const maxDays = 30;
-          const actualEndDate = daysDiff > maxDays ? 
-            new Date(startDate.getTime() + maxDays * 24 * 60 * 60 * 1000) : 
-            endDate;
-          
-          const results = await bingIngest.syncSite(siteUrl, task.st, {
-            startDate: startDate,
-            endDate: actualEndDate,
-            includeQueries: true,  // Include queries data
-            includePages: true,    // Include pages data
+          const results = await bingIngest.syncSite(siteUrl, 'web', {
+            startDate: chunkStart,
+            endDate: chunkEnd,
+            includeQueries: true,
+            includePages: true,
             includeTotals: true
           });
           
-          logger.info(`Bing Scheduler: completed ${siteUrl} (${task.st}) - ${JSON.stringify(results)}`);
+          processedChunks++;
+          consecutiveErrors = 0; // Reset error counter on success
           
-        } catch (error) {
-          logger.error(`Bing Scheduler: error processing ${siteUrl} (${task.st}):`, error.message);
+          logger.info(`Bing Scheduler: Chunk ${chunk + 1} completed for ${siteUrl} - ${JSON.stringify(results.results)}`);
+          
+          // Add delay between chunks to avoid overwhelming the API
+          if (chunk < totalChunks - 1) {
+            const delay = 3000; // 3 seconds between chunks
+            logger.info(`Waiting ${delay}ms before processing next chunk...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+          
+        } catch (chunkError) {
+          consecutiveErrors++;
+          logger.error(`Bing Scheduler: Error in chunk ${chunk + 1} for ${siteUrl} (${consecutiveErrors}/${maxConsecutiveErrors} consecutive errors):`, chunkError.message);
+          
+          // If we have too many consecutive errors, stop processing this domain
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            logger.error(`Bing Scheduler: Too many consecutive errors (${consecutiveErrors}), stopping sync for ${siteUrl}`);
+            break;
+          }
+          
+          // Add exponential backoff delay before retrying
+          const backoffDelay = Math.min(1000 * Math.pow(2, consecutiveErrors), 10000); // Max 10 seconds
+          logger.info(`Waiting ${backoffDelay}ms before continuing...`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
+          
+          // Continue with next chunk instead of failing completely
+          continue;
         }
       }
 
@@ -244,7 +253,7 @@ class BingScheduler {
         WHERE id = $2
       `, next, prop.id);
       
-      logger.info(`Bing Scheduler: ${siteUrl} sync complete, next sync scheduled for ${next.toISOString()}`);
+      logger.info(`Bing Scheduler: ${siteUrl} sync complete (${processedChunks}/${totalChunks} chunks processed), next sync scheduled for ${next.toISOString()}`);
       
     } catch (e) {
       logger.error('Bing Scheduler domain sync error:', e.message);
@@ -293,6 +302,88 @@ class BingScheduler {
       logger.info(`Removed Bing property ${siteUrl} for user ${userId} from scheduler`);
     } catch (error) {
       logger.error(`Error removing Bing property ${siteUrl} for user ${userId}:`, error.message);
+      throw error;
+    }
+  }
+
+  // Method to discover and auto-register all available Bing domains for a user
+  async discoverAndRegisterDomains(userId) {
+    try {
+      const bingApi = await ensureBingApiClient(userId);
+      const sites = await bingApi.getUserSites();
+      
+      if (!sites || sites.length === 0) {
+        logger.warn(`No Bing sites found for user ${userId}`);
+        return [];
+      }
+
+      logger.info(`Discovered ${sites.length} Bing sites for user ${userId}`);
+      
+      const registeredSites = [];
+      const now = new Date();
+      
+      for (let i = 0; i < sites.length; i++) {
+        const site = sites[i];
+        try {
+          // Check if already registered
+          const existing = await databaseService.prisma.$queryRawUnsafe(`
+            SELECT id FROM bing_user_property 
+            WHERE user_id = $1 AND site_url = $2
+          `, userId, site.siteUrl);
+          
+          if (existing.length > 0) {
+            logger.info(`Bing site ${site.siteUrl} already registered for user ${userId}`);
+            continue;
+          }
+          
+          // Register new site with staggered start times (5 minutes apart)
+          const priorityOrder = i;
+          const nextSyncDueAt = new Date(now.getTime() + (i * 5 * 60 * 1000)); // 5 minutes apart
+          
+          await databaseService.prisma.$executeRawUnsafe(`
+            INSERT INTO bing_user_property (user_id, site_url, enabled, sync_interval_hours, priority_order, next_sync_due_at, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+          `, userId, site.siteUrl, true, 24, priorityOrder, nextSyncDueAt);
+          
+          registeredSites.push({
+            siteUrl: site.siteUrl,
+            priorityOrder,
+            nextSyncDueAt: nextSyncDueAt.toISOString()
+          });
+          
+          logger.info(`Registered new Bing site ${site.siteUrl} for user ${userId} (priority ${priorityOrder}, next sync: ${nextSyncDueAt.toISOString()})`);
+          
+        } catch (error) {
+          logger.error(`Error registering Bing site ${site.siteUrl} for user ${userId}:`, error.message);
+        }
+      }
+      
+      logger.info(`Auto-registration complete for user ${userId}: ${registeredSites.length} new sites registered`);
+      return registeredSites;
+      
+    } catch (error) {
+      logger.error(`Error discovering Bing domains for user ${userId}:`, error.message);
+      throw error;
+    }
+  }
+
+  // Method to get all registered properties for a user (or all users if admin)
+  async getRegisteredProperties(userId, isAdmin = false) {
+    try {
+      const whereClause = isAdmin ? '' : 'WHERE user_id = $1';
+      const params = isAdmin ? [] : [userId];
+      
+      const properties = await databaseService.prisma.$queryRawUnsafe(`
+        SELECT bup.*, u.email, u.username
+        FROM bing_user_property bup
+        LEFT JOIN users u ON bup.user_id = u.id
+        ${whereClause}
+        ORDER BY bup.priority_order ASC, bup.next_sync_due_at ASC
+      `, ...params);
+      
+      return properties;
+    } catch (error) {
+      logger.error(`Error getting registered Bing properties:`, error.message);
       throw error;
     }
   }

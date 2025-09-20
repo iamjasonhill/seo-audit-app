@@ -272,6 +272,98 @@ router.get('/sync-status', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/bing/sync/discover - Discover and register all available Bing domains
+router.post('/sync/discover', requireAuth, async (req, res) => {
+  try {
+    const registeredSites = await bingScheduler.discoverAndRegisterDomains(req.user.id);
+    
+    res.json({
+      success: true,
+      message: `Discovered and registered ${registeredSites.length} Bing domains`,
+      registeredSites
+    });
+  } catch (err) {
+    logger.error('Bing domain discovery error:', err.message);
+    res.status(500).json({ error: 'BingDiscoveryError', message: err.message });
+  }
+});
+
+// GET /api/bing/sync/properties - Get all registered Bing properties
+router.get('/sync/properties', requireAuth, async (req, res) => {
+  try {
+    // Check if user is admin
+    const me = await databaseService.prisma.user.findUnique({ where: { id: req.user.id } });
+    const isAdmin = me && me.role === 'admin';
+    
+    const properties = await bingScheduler.getRegisteredProperties(req.user.id, isAdmin);
+    
+    res.json({
+      success: true,
+      properties,
+      isAdmin
+    });
+  } catch (err) {
+    logger.error('Bing sync properties error:', err.message);
+    res.status(500).json({ error: 'BingSyncPropertiesError', message: err.message });
+  }
+});
+
+// POST /api/bing/sync/register - Register a specific domain for syncing
+router.post('/sync/register', requireAuth, async (req, res) => {
+  try {
+    const { siteUrl, syncIntervalHours = 24, priorityOrder = 0 } = req.body;
+    
+    if (!siteUrl) {
+      return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
+    }
+    
+    await bingScheduler.addProperty(req.user.id, siteUrl, {
+      syncIntervalHours,
+      priorityOrder
+    });
+    
+    res.json({
+      success: true,
+      message: `Registered ${siteUrl} for Bing syncing`
+    });
+  } catch (err) {
+    logger.error('Bing sync register error:', err.message);
+    res.status(500).json({ error: 'BingSyncRegisterError', message: err.message });
+  }
+});
+
+// DELETE /api/bing/sync/unregister - Unregister a domain from syncing
+router.delete('/sync/unregister', requireAuth, async (req, res) => {
+  try {
+    const { siteUrl } = req.body;
+    
+    if (!siteUrl) {
+      return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
+    }
+    
+    await bingScheduler.removeProperty(req.user.id, siteUrl);
+    
+    res.json({
+      success: true,
+      message: `Unregistered ${siteUrl} from Bing syncing`
+    });
+  } catch (err) {
+    logger.error('Bing sync unregister error:', err.message);
+    res.status(500).json({ error: 'BingSyncUnregisterError', message: err.message });
+  }
+});
+
+// GET /api/bing/scheduler/tick - Manual scheduler tick (for testing)
+router.get('/scheduler/tick', async (req, res) => {
+  try {
+    await bingScheduler.tick();
+    res.json({ success: true, message: 'Bing scheduler tick executed' });
+  } catch (err) {
+    logger.error('Bing scheduler tick error:', err.message);
+    res.status(500).json({ error: 'BingSchedulerTickError', message: err.message });
+  }
+});
+
 // GET /api/bing/data/:siteUrl - Get Bing data for a specific site
 router.get('/data/:siteUrl', requireAuth, async (req, res) => {
   try {
