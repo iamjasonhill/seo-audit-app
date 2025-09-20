@@ -301,6 +301,17 @@
   <script>
     const API_BASE = '/api/bing';
     
+    // Check authentication status
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/status', { credentials: 'include' });
+        const data = await response.json();
+        return data.authenticated && data.user;
+      } catch (error) {
+        return false;
+      }
+    }
+    
     async function apiCall(endpoint, options = {}) {
       const url = `${API_BASE}${endpoint}`;
       const fetchOptions = {
@@ -572,6 +583,28 @@
       const button = document.getElementById('completeSetupBtn');
       showLoading(button);
 
+      // Check authentication first
+      const authUser = await checkAuth();
+      if (!authUser) {
+        showResult('completeSetupResult', `
+          <div class="status error">Authentication Required</div>
+          <p>Please log in first before using the complete setup feature.</p>
+          <p><a href="/login" target="_blank">Go to Login Page</a></p>
+        `, true);
+        showLoading(button, false);
+        return;
+      }
+
+      if (authUser.role !== 'admin') {
+        showResult('completeSetupResult', `
+          <div class="status error">Admin Access Required</div>
+          <p>You must be logged in as an admin user to use the complete setup feature.</p>
+          <p>Current role: ${authUser.role}</p>
+        `, true);
+        showLoading(button, false);
+        return;
+      }
+
       const monthsBack = parseInt(document.getElementById('completeMonths').value);
       const staggerDelay = parseInt(document.getElementById('completeStaggerDelay').value);
       const syncIntervalHours = parseInt(document.getElementById('completeSyncInterval').value);
@@ -599,15 +632,24 @@
             </details>
           `);
         } else {
+          let errorMessage = data.message || 'Unknown error';
+          if (response.status === 401) {
+            errorMessage = 'Authentication required. Please log in first.';
+          } else if (response.status === 403) {
+            errorMessage = 'Admin access required. You must be logged in as an admin user.';
+          }
           showResult('completeSetupResult', `
             <div class="status error">Complete setup failed</div>
-            <p>${data.message || 'Unknown error'}</p>
+            <p><strong>Error:</strong> ${errorMessage}</p>
+            <p><strong>Status:</strong> ${response.status}</p>
+            ${data.error ? `<p><strong>Details:</strong> ${data.error}</p>` : ''}
           `, true);
         }
       } catch (error) {
         showResult('completeSetupResult', `
           <div class="status error">Complete setup failed</div>
-          <p>${error.message}</p>
+          <p><strong>Error:</strong> ${error.message}</p>
+          <p>Please check your authentication and try again.</p>
         `, true);
       } finally {
         showLoading(button, false);

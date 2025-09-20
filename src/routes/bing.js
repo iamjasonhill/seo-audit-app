@@ -138,6 +138,12 @@ router.post('/backfill-all', requireAuth, async (req, res) => {
 // POST /api/bing/complete-setup - Complete setup: backfill all sites and add to scheduler
 router.post('/complete-setup', requireAuth, async (req, res) => {
   try {
+    logger.info('Complete setup request received', { userId: req.user?.id, role: req.user?.role });
+    
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
     }
