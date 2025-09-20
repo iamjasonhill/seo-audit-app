@@ -128,7 +128,20 @@
       
       try {
         const days = Math.max(1, Math.round((new Date(range.end) - new Date(range.start)) / (24*60*60*1000)) + 1);
-        const url = `/api/bing/data/${encodeURIComponent(qs('site'))}?searchType=${searchType}&days=${days}&dataType=totals`;
+        
+        // Convert GSC property URL to actual URL for Bing data lookup
+        const siteParam = qs('site');
+        let bingSiteUrl = siteParam;
+        
+        if (siteParam && siteParam.startsWith('sc-domain:')) {
+          const domain = siteParam.replace('sc-domain:', '').trim();
+          if (domain) {
+            // Try both HTTP and HTTPS versions
+            bingSiteUrl = `https://${domain}/`;
+          }
+        }
+        
+        const url = `/api/bing/data/${encodeURIComponent(bingSiteUrl)}?searchType=${searchType}&days=${days}&dataType=totals`;
         const r = await fetch(url, { credentials:'include' }); 
         const d = await r.json();
         
@@ -748,7 +761,19 @@
         params.append('searchType', typeEl.value);
         params.append('days', String(Math.ceil((new Date(endEl.value) - new Date(startEl.value)) / (24*60*60*1000)) + 1));
         params.append('dataType', tab);
-        return `${endpoint}/${encodeURIComponent(qs('site'))}?${params.toString()}`;
+        
+        // Convert GSC property URL to actual URL for Bing data lookup
+        const siteParam = qs('site');
+        let bingSiteUrl = siteParam;
+        
+        if (siteParam && siteParam.startsWith('sc-domain:')) {
+          const domain = siteParam.replace('sc-domain:', '').trim();
+          if (domain) {
+            bingSiteUrl = `https://${domain}/`;
+          }
+        }
+        
+        return `${endpoint}/${encodeURIComponent(bingSiteUrl)}?${params.toString()}`;
       };
 
       const render = (rows) => {
@@ -821,7 +846,18 @@
       
       async function loadBingSync() {
         try {
-          const r = await fetch(`/api/bing/sync-status?siteUrl=${encodeURIComponent(qs('site'))}`, { credentials:'include' });
+          // Convert GSC property URL to actual URL for Bing data lookup
+          const siteParam = qs('site');
+          let bingSiteUrl = siteParam;
+          
+          if (siteParam && siteParam.startsWith('sc-domain:')) {
+            const domain = siteParam.replace('sc-domain:', '').trim();
+            if (domain) {
+              bingSiteUrl = `https://${domain}/`;
+            }
+          }
+          
+          const r = await fetch(`/api/bing/sync-status?siteUrl=${encodeURIComponent(bingSiteUrl)}`, { credentials:'include' });
           const d = await r.json();
           if (!r.ok || !d.success) throw new Error(d.message||'Failed to load Bing sync status');
           const rows = d.status || [];
@@ -844,12 +880,23 @@
           const orig = bingBackfillBtn.innerHTML; 
           bingBackfillBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Backfilling…';
           try {
+            // Convert GSC property URL to actual URL for Bing data lookup
+            const siteParam = qs('site');
+            let bingSiteUrl = siteParam;
+            
+            if (siteParam && siteParam.startsWith('sc-domain:')) {
+              const domain = siteParam.replace('sc-domain:', '').trim();
+              if (domain) {
+                bingSiteUrl = `https://${domain}/`;
+              }
+            }
+            
             const resp = await fetch('/api/bing/backfill', { 
               method:'POST', 
               headers:{'Content-Type':'application/json'}, 
               credentials:'include', 
               body: JSON.stringify({ 
-                siteUrl: qs('site'),
+                siteUrl: bingSiteUrl,
                 searchType: 'web',
                 months: 24
               }) 
