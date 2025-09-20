@@ -295,6 +295,9 @@
     <div class="header">
         <h1><i class="fas fa-chart-line"></i> SEO Audit Dashboard</h1>
         <div class="user-info">
+            <a id="adminLink" href="/admin" class="logout-btn" style="background:#6c757d; display:none">
+                <i class="fas fa-shield-alt"></i> Admin
+            </a>
             <span id="userInfo">Loading...</span>
             <button class="logout-btn" id="logoutBtn">
                 <i class="fas fa-sign-out-alt"></i> Logout
@@ -779,6 +782,11 @@
                     }
                     
                     this.userInfo.textContent = `Welcome, ${data.user.username}`;
+                    // Toggle Admin link for admin role
+                    try {
+                        const adminLink = document.getElementById('adminLink');
+                        if (adminLink) adminLink.style.display = (data.user?.role === 'admin') ? 'inline-flex' : 'none';
+                    } catch (_) {}
                 } catch (error) {
                     window.location.href = '/login';
                 }

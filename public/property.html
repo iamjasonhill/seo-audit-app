@@ -176,6 +176,13 @@
       const site = qs('site');
       if (!site) { document.getElementById('err').textContent = 'Missing site parameter'; return; }
       document.getElementById('siteLabel').textContent = site;
+      // Toggle Admin link depending on role
+      try {
+        const r = await fetch('/api/auth/status', { credentials:'include' });
+        const d = await r.json();
+        const link = document.getElementById('adminLink');
+        if (link) link.style.display = (d?.authenticated && d?.user?.role === 'admin') ? 'inline-flex' : 'none';
+      } catch(_) {}
       // Set GSC link
       const gscLink = document.getElementById('openGsc');
       if (gscLink) {
@@ -314,6 +321,7 @@
   <div class="top">
     <div class="h1"><i class="fas fa-globe"></i> Property <span class="muted">—</span> <span id="siteLabel" class="muted"></span></div>
     <div>
+      <a id="adminLink" href="/admin" class="audit-btn" style="background:#6c757d; display:none"><i class="fas fa-shield-alt"></i> Admin</a>
       <a href="/dashboard" class="audit-btn" style="background:#6c757d"><i class="fas fa-arrow-left"></i> Dashboard</a>
       <a id="openGsc" href="#" class="audit-btn" style="margin-left:.5rem;background:#198754" target="_blank"><i class="fab fa-google"></i> Open in GSC</a>
     </div>

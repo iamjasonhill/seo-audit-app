@@ -43,6 +43,7 @@
         <nav class="links">
             <a href="/">Home</a>
             <a href="/dashboard">Dashboard</a>
+            <a id="adminLink" href="/admin" style="display:none">Admin</a>
             <a href="/login">Login</a>
         </nav>
     </header>
@@ -501,6 +502,15 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => new ReportPage());
+        // Toggle Admin link by role
+        (async () => {
+            try {
+                const r = await fetch('/api/auth/status', { credentials: 'include' });
+                const d = await r.json();
+                const link = document.getElementById('adminLink');
+                if (link) link.style.display = (d?.authenticated && d?.user?.role === 'admin') ? '' : 'none';
+            } catch (_) {}
+        })();
     </script>
 </body>
 </html>
