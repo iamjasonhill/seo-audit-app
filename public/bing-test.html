@@ -129,6 +129,20 @@
       <div id="backfillResult" class="result" style="display:none;"></div>
     </div>
 
+    <!-- Bulk Backfill All Sites -->
+    <div class="card">
+      <h3><i class="fas fa-globe"></i> Bulk Backfill All Sites</h3>
+      <p>This will backfill historical data for ALL sites in your Bing Webmaster Tools account.</p>
+      <div class="form-group">
+        <label for="bulkBackfillMonths">Months to backfill (default: 24)</label>
+        <input type="number" id="bulkBackfillMonths" value="24" min="1" max="36">
+      </div>
+      <button class="btn btn-danger" id="bulkBackfillBtn">
+        <i class="fas fa-globe"></i> Backfill ALL Sites
+      </button>
+      <div id="bulkBackfillResult" class="result" style="display:none;"></div>
+    </div>
+
     <!-- Data Retrieval -->
     <div class="card">
       <h3><i class="fas fa-database"></i> Retrieve Stored Data</h3>
@@ -382,6 +396,46 @@
       }
     }
 
+    async function bulkBackfillAll() {
+      const button = document.getElementById('bulkBackfillBtn');
+      showLoading(button);
+
+      const monthsBack = parseInt(document.getElementById('bulkBackfillMonths').value);
+
+      try {
+        const { response, data } = await apiCall('/backfill-all', {
+          monthsBack: monthsBack
+        });
+        
+        if (response.ok && data.success) {
+          const summary = data.summary || {};
+          showResult('bulkBackfillResult', `
+            <div class="status success">Bulk backfill completed!</div>
+            <p><strong>Total Sites:</strong> ${summary.totalSites}</p>
+            <p><strong>Successful:</strong> ${summary.successful}</p>
+            <p><strong>Failed:</strong> ${summary.failed}</p>
+            <p><strong>Months Back:</strong> ${monthsBack}</p>
+            <details>
+              <summary>Detailed Results</summary>
+              <pre>${JSON.stringify(data.results, null, 2)}</pre>
+            </details>
+          `);
+        } else {
+          showResult('bulkBackfillResult', `
+            <div class="status error">Bulk backfill failed</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('bulkBackfillResult', `
+          <div class="status error">Bulk backfill failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
     async function retrieveData() {
       const button = document.getElementById('retrieveDataBtn');
       showLoading(button);
@@ -473,6 +527,7 @@
       document.getElementById('loadPropertiesBtn').addEventListener('click', loadProperties);
       document.getElementById('syncDataBtn').addEventListener('click', syncData);
       document.getElementById('backfillDataBtn').addEventListener('click', backfillData);
+      document.getElementById('bulkBackfillBtn').addEventListener('click', bulkBackfillAll);
       document.getElementById('retrieveDataBtn').addEventListener('click', retrieveData);
       document.getElementById('loadSyncStatusBtn').addEventListener('click', loadSyncStatus);
 

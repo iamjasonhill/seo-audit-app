@@ -65,6 +65,68 @@ router.post('/backfill', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/bing/backfill-all - Bulk backfill all available sites
+router.post('/backfill-all', requireAuth, async (req, res) => {
+  try {
+    const { searchType = 'web', monthsBack = 24 } = req.body; // Default to 2 years of data
+    
+    logger.info(`Starting bulk Bing backfill for all sites (${monthsBack} months)`);
+    
+    // Get all available sites from Bing
+    const apiKey = process.env.BING_API_KEY || '';
+    const bingApi = new BingApiClient(apiKey);
+    const sites = await bingApi.getUserSites();
+    
+    if (!sites || sites.length === 0) {
+      return res.status(400).json({ 
+        error: 'No sites found in Bing Webmaster Tools' 
+      });
+    }
+
+    const results = [];
+    
+    // Process each site
+    for (const site of sites) {
+      try {
+        logger.info(`Backfilling data for ${site.siteUrl}`);
+        const result = await bingIngest.backfillSite(site.siteUrl, searchType, monthsBack);
+        results.push({
+          siteUrl: site.siteUrl,
+          success: true,
+          result
+        });
+      } catch (error) {
+        logger.error(`Backfill failed for ${site.siteUrl}:`, error);
+        results.push({
+          siteUrl: site.siteUrl,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+    
+    const successCount = results.filter(r => r.success).length;
+    const failureCount = results.filter(r => !r.success).length;
+    
+    res.json({
+      success: true,
+      message: `Bulk backfill completed: ${successCount} successful, ${failureCount} failed`,
+      summary: {
+        totalSites: sites.length,
+        successful: successCount,
+        failed: failureCount
+      },
+      results
+    });
+  } catch (error) {
+    logger.error('Bulk Bing backfill error:', error);
+    res.status(500).json({ 
+      error: 'Bulk backfill failed', 
+      message: error.message 
+    });
+  }
+});
+
 // GET /api/bing/sync-status - Get sync status for all sites
 router.get('/sync-status', requireAuth, async (req, res) => {
   try {
