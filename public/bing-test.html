@@ -156,8 +156,13 @@
       </div>
 
       <div class="form-group">
-        <label for="schedulerSiteUrl">Site URL to add to scheduler</label>
-        <input type="text" id="schedulerSiteUrl" placeholder="https://example.com/">
+        <label>Available Bing Properties</label>
+        <div id="availableProperties" class="site-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #e9ecef; border-radius: 4px; padding: 0.5rem;">
+          <div class="text-muted">Click "Load Available Properties" to see your Bing sites</div>
+        </div>
+        <button class="btn btn-info" id="loadAvailablePropertiesBtn">
+          <i class="fas fa-refresh"></i> Load Available Properties
+        </button>
       </div>
       
       <div class="form-group">
@@ -165,12 +170,18 @@
         <input type="number" id="schedulerInterval" value="24" min="1" max="168">
       </div>
       
-      <button class="btn btn-success" id="addToSchedulerBtn">
-        <i class="fas fa-plus"></i> Add to Scheduler
+      <div class="form-group">
+        <label for="staggerMinutes">Stagger delay between properties (minutes)</label>
+        <input type="number" id="staggerMinutes" value="5" min="1" max="60">
+        <small class="form-text text-muted">Delay between adding each property to avoid conflicts</small>
+      </div>
+      
+      <button class="btn btn-success" id="addAllToSchedulerBtn">
+        <i class="fas fa-plus"></i> Add All Properties to Scheduler
       </button>
       
-      <button class="btn btn-warning" id="removeFromSchedulerBtn">
-        <i class="fas fa-minus"></i> Remove from Scheduler
+      <button class="btn btn-warning" id="removeAllFromSchedulerBtn">
+        <i class="fas fa-minus"></i> Remove All from Scheduler
       </button>
       
       <button class="btn btn-info" id="listScheduledBtn">
@@ -242,8 +253,18 @@
         ...options
       };
       
-      // If no method is specified and we have data, default to POST
-      if (!fetchOptions.method && (options.body || Object.keys(options).length > 0)) {
+      // Handle different HTTP methods
+      if (options.method === 'GET') {
+        fetchOptions.method = 'GET';
+        // Remove body for GET requests
+        delete fetchOptions.body;
+      } else if (options.method === 'DELETE') {
+        fetchOptions.method = 'DELETE';
+        if (!fetchOptions.body) {
+          fetchOptions.body = JSON.stringify(options);
+        }
+      } else if (!fetchOptions.method && (options.body || Object.keys(options).length > 0)) {
+        // If no method is specified and we have data, default to POST
         fetchOptions.method = 'POST';
         if (!fetchOptions.body) {
           fetchOptions.body = JSON.stringify(options);
@@ -510,33 +531,24 @@
       }
     }
 
-    async function addToScheduler() {
-      const button = document.getElementById('addToSchedulerBtn');
+    let availableProperties = [];
+
+    async function loadAvailableProperties() {
+      const button = document.getElementById('loadAvailablePropertiesBtn');
       showLoading(button);
 
-      const siteUrl = document.getElementById('schedulerSiteUrl').value.trim();
-      const syncIntervalHours = parseInt(document.getElementById('schedulerInterval').value);
-
-      if (!siteUrl) {
-        showResult('schedulerResult', '<div class="status error">Please enter a site URL</div>', true);
-        showLoading(button, false);
-        return;
-      }
-
       try {
-        const { response, data } = await apiCall('/scheduler/add', {
-          siteUrl,
-          syncIntervalHours
-        });
+        const { response, data } = await apiCall('/properties');
         
         if (response.ok && data.success) {
+          availableProperties = data.properties || [];
+          displayAvailableProperties();
           showResult('schedulerResult', `
-            <div class="status success">Property added to scheduler!</div>
-            <p>${data.message}</p>
+            <div class="status success">Loaded ${availableProperties.length} available properties</div>
           `);
         } else {
           showResult('schedulerResult', `
-            <div class="status error">Failed to add property</div>
+            <div class="status error">Failed to load properties</div>
             <p>${data.message || 'Unknown error'}</p>
           `, true);
         }
@@ -550,38 +562,161 @@
       }
     }
 
-    async function removeFromScheduler() {
-      const button = document.getElementById('removeFromSchedulerBtn');
+    function displayAvailableProperties() {
+      const container = document.getElementById('availableProperties');
+      
+      if (availableProperties.length === 0) {
+        container.innerHTML = '<div class="text-muted">No properties found</div>';
+        return;
+      }
+
+      const propertiesList = availableProperties.map((prop, index) => `
+        <div class="site-item" style="display: flex; align-items: center; padding: 0.5rem; border-bottom: 1px solid #f1f3f4;">
+          <input type="checkbox" id="prop-${index}" value="${prop.siteUrl}" checked style="margin-right: 0.5rem;">
+          <label for="prop-${index}" style="flex: 1; margin: 0; cursor: pointer;">
+            <strong>${prop.siteUrl}</strong>
+            ${prop.displayName ? `<br><small class="text-muted">${prop.displayName}</small>` : ''}
+          </label>
+        </div>
+      `).join('');
+
+      container.innerHTML = propertiesList;
+    }
+
+    async function addAllToScheduler() {
+      const button = document.getElementById('addAllToSchedulerBtn');
       showLoading(button);
 
-      const siteUrl = document.getElementById('schedulerSiteUrl').value.trim();
+      const syncIntervalHours = parseInt(document.getElementById('schedulerInterval').value);
+      const staggerMinutes = parseInt(document.getElementById('staggerMinutes').value);
+      
+      // Get selected properties
+      const checkboxes = document.querySelectorAll('#availableProperties input[type="checkbox"]:checked');
+      const selectedProperties = Array.from(checkboxes).map(cb => cb.value);
 
-      if (!siteUrl) {
-        showResult('schedulerResult', '<div class="status error">Please enter a site URL</div>', true);
+      if (selectedProperties.length === 0) {
+        showResult('schedulerResult', '<div class="status error">Please select at least one property</div>', true);
         showLoading(button, false);
         return;
       }
 
       try {
-        const { response, data } = await apiCall('/scheduler/remove', {
-          method: 'DELETE',
-          siteUrl
-        });
-        
-        if (response.ok && data.success) {
-          showResult('schedulerResult', `
-            <div class="status success">Property removed from scheduler!</div>
-            <p>${data.message}</p>
-          `);
-        } else {
-          showResult('schedulerResult', `
-            <div class="status error">Failed to remove property</div>
-            <p>${data.message || 'Unknown error'}</p>
-          `, true);
+        let successCount = 0;
+        let errorCount = 0;
+        const results = [];
+
+        for (let i = 0; i < selectedProperties.length; i++) {
+          const siteUrl = selectedProperties[i];
+          
+          try {
+            const { response, data } = await apiCall('/scheduler/add', {
+              siteUrl,
+              syncIntervalHours,
+              priorityOrder: i // Stagger by priority order
+            });
+            
+            if (response.ok && data.success) {
+              successCount++;
+              results.push(`✅ ${siteUrl}`);
+            } else {
+              errorCount++;
+              results.push(`❌ ${siteUrl}: ${data.message || 'Unknown error'}`);
+            }
+          } catch (error) {
+            errorCount++;
+            results.push(`❌ ${siteUrl}: ${error.message}`);
+          }
+
+          // Add stagger delay between properties (except for the last one)
+          if (i < selectedProperties.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, staggerMinutes * 60 * 1000));
+          }
         }
+
+        showResult('schedulerResult', `
+          <div class="status ${errorCount === 0 ? 'success' : 'warning'}">
+            Bulk add completed: ${successCount} successful, ${errorCount} failed
+          </div>
+          <details>
+            <summary>Detailed Results</summary>
+            <pre>${results.join('\n')}</pre>
+          </details>
+        `);
+
       } catch (error) {
         showResult('schedulerResult', `
-          <div class="status error">Request failed</div>
+          <div class="status error">Bulk add failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    async function removeAllFromScheduler() {
+      const button = document.getElementById('removeAllFromSchedulerBtn');
+      showLoading(button);
+
+      try {
+        // First get all scheduled properties
+        const { response: listResponse, data: listData } = await apiCall('/scheduler/properties', { method: 'GET' });
+        
+        if (!listResponse.ok || !listData.success) {
+          showResult('schedulerResult', `
+            <div class="status error">Failed to get scheduled properties</div>
+            <p>${listData.message || 'Unknown error'}</p>
+          `, true);
+          showLoading(button, false);
+          return;
+        }
+
+        const scheduledProperties = listData.properties || [];
+        
+        if (scheduledProperties.length === 0) {
+          showResult('schedulerResult', `
+            <div class="status info">No scheduled properties found</div>
+          `);
+          showLoading(button, false);
+          return;
+        }
+
+        let successCount = 0;
+        let errorCount = 0;
+        const results = [];
+
+        for (const prop of scheduledProperties) {
+          try {
+            const { response, data } = await apiCall('/scheduler/remove', {
+              method: 'DELETE',
+              siteUrl: prop.site_url
+            });
+            
+            if (response.ok && data.success) {
+              successCount++;
+              results.push(`✅ ${prop.site_url}`);
+            } else {
+              errorCount++;
+              results.push(`❌ ${prop.site_url}: ${data.message || 'Unknown error'}`);
+            }
+          } catch (error) {
+            errorCount++;
+            results.push(`❌ ${prop.site_url}: ${error.message}`);
+          }
+        }
+
+        showResult('schedulerResult', `
+          <div class="status ${errorCount === 0 ? 'success' : 'warning'}">
+            Bulk remove completed: ${successCount} successful, ${errorCount} failed
+          </div>
+          <details>
+            <summary>Detailed Results</summary>
+            <pre>${results.join('\n')}</pre>
+          </details>
+        `);
+
+      } catch (error) {
+        showResult('schedulerResult', `
+          <div class="status error">Bulk remove failed</div>
           <p>${error.message}</p>
         `, true);
       } finally {
@@ -731,8 +866,9 @@
       document.getElementById('backfillDataBtn').addEventListener('click', backfillData);
       document.getElementById('bulkBackfillBtn').addEventListener('click', bulkBackfillAll);
       document.getElementById('setupTablesBtn').addEventListener('click', setupSchedulerTables);
-      document.getElementById('addToSchedulerBtn').addEventListener('click', addToScheduler);
-      document.getElementById('removeFromSchedulerBtn').addEventListener('click', removeFromScheduler);
+      document.getElementById('loadAvailablePropertiesBtn').addEventListener('click', loadAvailableProperties);
+      document.getElementById('addAllToSchedulerBtn').addEventListener('click', addAllToScheduler);
+      document.getElementById('removeAllFromSchedulerBtn').addEventListener('click', removeAllFromScheduler);
       document.getElementById('listScheduledBtn').addEventListener('click', listScheduledProperties);
       document.getElementById('retrieveDataBtn').addEventListener('click', retrieveData);
       document.getElementById('loadSyncStatusBtn').addEventListener('click', loadSyncStatus);
