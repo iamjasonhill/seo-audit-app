@@ -665,7 +665,7 @@
                         .sort((a,b)=> (a.priorityOrder||0)-(b.priorityOrder||0));
                     if (!rows.length) { host.innerHTML = '<p>No properties registered yet. Click “List Properties” above to register all.</p>'; return; }
                     const fmt = (d)=> d ? new Date(d).toLocaleString(undefined,{dateStyle:'short',timeStyle:'short'}) : '—';
-                    const link = (site)=> site.startsWith('sc-domain:') ? `/property?site=${encodeURIComponent(site)}` : `/property?site=${encodeURIComponent(site)}`;
+                    const link = (site, userId)=> site.startsWith('sc-domain:') ? `/property?site=${encodeURIComponent(site)}${isAdmin&&userId?`&userId=${encodeURIComponent(userId)}`:''}` : `/property?site=${encodeURIComponent(site)}${isAdmin&&userId?`&userId=${encodeURIComponent(userId)}`:''}`;
                     const table = `
                         <table class="history-table">
                           <thead><tr><th>#</th><th>Property</th>${isAdmin?'<th>User</th>':''}<th>Enabled</th><th>Last Full Sync</th><th>Next Due</th><th>Actions</th></tr></thead>
@@ -673,7 +673,7 @@
                           ${rows.map(r=>`
                             <tr>
                               <td>${r.priorityOrder ?? 0}</td>
-                              <td><a class="view-audit-btn" href="${link(r.siteUrl)}" target="_blank">${r.siteUrl}</a></td>
+                              <td><a class="view-audit-btn" href="${link(r.siteUrl, r.userId)}" target="_blank">${r.siteUrl}</a></td>
                               ${isAdmin?`<td>${r.owner?.email || r.owner?.username || r.userId || ''}</td>`:''}
                               <td>${r.enabled ? 'Yes' : 'No'}</td>
                               <td>${fmt(r.lastFullSyncAt)}</td>

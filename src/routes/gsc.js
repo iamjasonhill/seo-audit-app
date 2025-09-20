@@ -24,13 +24,14 @@ async function autoBindFromCookie(req, res) {
   }
 }
 
-const ensureGscContext = async (req) => {
-  let row = await gscAuth.getUserTokens(req.user.id);
-  const selected = await gscAuth.getUserSelection(req.user.id);
+const ensureGscContext = async (req, overrideUserId) => {
+  const targetUserId = overrideUserId || req.user.id;
+  let row = await gscAuth.getUserTokens(targetUserId);
+  const selected = await gscAuth.getUserSelection(targetUserId);
   if (!row || (!row.accessToken && !row.refreshToken)) {
     // Try to bind from cookie automatically
     await autoBindFromCookie(req, /* res */ undefined);
-    row = await gscAuth.getUserTokens(req.user.id);
+    row = await gscAuth.getUserTokens(targetUserId);
   }
   if (!row || (!row.accessToken && !row.refreshToken)) {
     const err = new Error('Connect Google first');
@@ -49,9 +50,9 @@ const ensureGscContext = async (req) => {
   if (row.expiryDate) creds.expiry_date = new Date(row.expiryDate).getTime();
   oauth2Client.setCredentials(creds);
   oauth2Client.on('tokens', async (t) => {
-    try { await gscAuth.saveUserTokens(req.user.id, t); } catch (_) {}
+    try { await gscAuth.saveUserTokens(targetUserId, t); } catch (_) {}
   });
-  return { oauth2Client, selected };
+  return { oauth2Client, selected, userId: targetUserId };
 };
 
 const getDefaultRange = (startDate, endDate) => {
@@ -594,7 +595,23 @@ router.get('/analytics/appearance', requireAuth, async (req, res) => {
 // Sitemaps
 router.get('/sitemaps', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = await ensureGscContext(req);
+    // Admin override: allow specifying siteUrl and/or userId to inspect another user's property
+    const siteUrlOverride = req.query.siteUrl;
+    const userIdOverride = req.query.userId ? Number(req.query.userId) : undefined;
+    let selected = null;
+    let oauth2Client = null;
+    if (userIdOverride && userIdOverride !== req.user.id) {
+      // Verify admin role before impersonating
+      const me = await databaseService.prisma.user.findUnique({ where: { id: req.user.id } }).catch(()=>null);
+      if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Forbidden', message: 'Admin only' });
+      const ctx = await ensureGscContext(req, userIdOverride);
+      oauth2Client = ctx.oauth2Client;
+      selected = siteUrlOverride || ctx.selected;
+    } else {
+      const ctx = await ensureGscContext(req);
+      oauth2Client = ctx.oauth2Client;
+      selected = siteUrlOverride || ctx.selected;
+    }
     const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client });
     const resp = await webmasters.sitemaps.list({ siteUrl: selected });
     const sitemaps = (resp.data.sitemap || resp.data.sitemap || resp.data.sitemaps || resp.data)?.sitemap || resp.data?.sitemap || resp.data?.items || [];
@@ -618,7 +635,21 @@ router.get('/sitemaps', requireAuth, async (req, res) => {
 
 router.post('/sitemaps/submit', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = await ensureGscContext(req);
+    const siteUrlOverride = req.query.siteUrl;
+    const userIdOverride = req.query.userId ? Number(req.query.userId) : undefined;
+    let selected = null;
+    let oauth2Client = null;
+    if (userIdOverride && userIdOverride !== req.user.id) {
+      const me = await databaseService.prisma.user.findUnique({ where: { id: req.user.id } }).catch(()=>null);
+      if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Forbidden', message: 'Admin only' });
+      const ctx = await ensureGscContext(req, userIdOverride);
+      oauth2Client = ctx.oauth2Client;
+      selected = siteUrlOverride || ctx.selected;
+    } else {
+      const ctx = await ensureGscContext(req);
+      oauth2Client = ctx.oauth2Client;
+      selected = siteUrlOverride || ctx.selected;
+    }
     const { sitemapUrl } = req.body || {};
     if (!sitemapUrl) return res.status(400).json({ error: 'BadRequest', message: 'sitemapUrl is required' });
     const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client });

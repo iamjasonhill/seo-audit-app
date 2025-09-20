@@ -27,6 +27,7 @@
   <script>
     // Small helpers reused from dashboard
     const qs = (k) => new URLSearchParams(location.search).get(k);
+    const qsi = (k) => { const v = qs(k); return v!==null && v!==undefined && v!=='' ? v : null; };
     const fmtNum = (n) => (n ?? 0).toLocaleString();
     const pct = (v) => (((v ?? 0) * 100) || 0).toFixed(2) + '%';
 
@@ -627,13 +628,28 @@
       };
       const load = async ()=>{
         list.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading…</p>';
-        try { const r = await fetch('/api/gsc/sitemaps', { credentials:'include' }); const d = await r.json(); if (!r.ok||!d.success) throw new Error(d.message||'Failed to load'); render(d.sitemaps); }
+        try {
+          const site = qsi('site');
+          const uid = qsi('userId');
+          const u = new URL('/api/gsc/sitemaps', location.origin);
+          if (site) u.searchParams.set('siteUrl', site);
+          if (uid) u.searchParams.set('userId', uid);
+          const r = await fetch(u.toString(), { credentials:'include' });
+          const d = await r.json(); if (!r.ok||!d.success) throw new Error(d.message||'Failed to load'); render(d.sitemaps);
+        }
         catch(e){ list.innerHTML = `<p class=\"error\">${e.message}</p>`; }
       };
       btn.addEventListener('click', async ()=>{
-        const url = (input.value||'').trim(); if (!/^https?:\/\//i.test(url)) { list.innerHTML = '<p class="error">Enter a valid sitemap URL.</p>'; return; }
+        const sitemap = (input.value||'').trim(); if (!/^https?:\/\//i.test(sitemap)) { list.innerHTML = '<p class="error">Enter a valid sitemap URL.</p>'; return; }
         const orig=btn.innerHTML; btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Submitting';
-        try{ const r = await fetch('/api/gsc/sitemaps/submit',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ sitemapUrl:url }) }); const d=await r.json(); if (!r.ok||!d.success) throw new Error(d.message||'Submit failed'); await load(); }
+        try{
+          const site = qsi('site');
+          const uid = qsi('userId');
+          const u = new URL('/api/gsc/sitemaps/submit', location.origin);
+          if (site) u.searchParams.set('siteUrl', site);
+          if (uid) u.searchParams.set('userId', uid);
+          const r = await fetch(u.toString(),{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ sitemapUrl:sitemap }) }); const d=await r.json(); if (!r.ok||!d.success) throw new Error(d.message||'Submit failed'); await load();
+        }
         catch(e){ list.innerHTML = `<p class=\"error\">${e.message}</p>`; }
         finally{ btn.disabled=false; btn.innerHTML=orig; }
       });
