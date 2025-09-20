@@ -358,39 +358,39 @@ router.post('/selected', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/summary?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
 router.get('/analytics/summary', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = await ensureGscContext(req);
-    const { startDate, endDate, searchType } = req.query;
+    const { startDate, endDate, searchType, siteUrl: siteParam } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
+    const site = siteParam || await gscAuth.getUserSelection(req.user.id);
+    if (!site) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
     // Prefer DB whenever coverage overlaps the requested range.
-    const coverage = await getCoverageFromDb(selected, st);
+    const coverage = await getCoverageFromDb(site, st);
     if (coverage && coverage.start && coverage.end) {
       const effEnd = (new Date(coverage.end) < new Date(range.endDate)) ? coverage.end : range.endDate;
       if (new Date(effEnd) >= new Date(range.startDate)) {
         const effRange = { startDate: range.startDate, endDate: effEnd };
-        const { totals, daily } = await getSummaryFromDb(selected, st, effRange);
-        return res.json({ success: true, property: selected, totals, daily, source: 'db', coverage });
+        const { totals, daily } = await getSummaryFromDb(site, st, effRange);
+        return res.json({ success: true, property: site, totals, daily, source: 'db', coverage });
       }
     }
-    // If DB-only mode, do not call Google
-    // DB-only mode: do not call Google live
     if (process.env.GSC_DB_ONLY === 'true') {
-      return respondNotReady(req, res, selected, st);
+      return respondNotReady(req, res, site, st);
     }
-    // Fallback to live API (when DB-only not enforced)
+    // Fallback to live API (requires Google context)
+    const { oauth2Client } = await ensureGscContext(req);
     const webmasters = google.webmasters({ version: 'v3', auth: oauth2Client });
     const totalsResp = await webmasters.searchanalytics.query({
-      siteUrl: selected,
+      siteUrl: site,
       requestBody: { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', rowLimit: 1 }
     });
     const totalsRow = (totalsResp.data.rows && totalsResp.data.rows[0]) || {};
     const totals = { clicks: Number(totalsRow.clicks || 0), impressions: Number(totalsRow.impressions || 0), ctr: Number(totalsRow.ctr || 0), position: Number(totalsRow.position || 0) };
     const dailyResp = await webmasters.searchanalytics.query({
-      siteUrl: selected,
+      siteUrl: site,
       requestBody: { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['date'], rowLimit: 5000 }
     });
     const daily = (dailyResp.data.rows || []).map(r => ({ date: r.keys && r.keys[0], clicks: Number(r.clicks || 0), impressions: Number(r.impressions || 0), ctr: Number(r.ctr || 0), position: Number(r.position || 0) }));
-    res.json({ success: true, property: selected, totals, daily, source: 'live' });
+    res.json({ success: true, property: site, totals, daily, source: 'live' });
   } catch (err) {
     logger.error('GSC analytics summary error:', err.message);
     res.status(500).json({ error: 'AnalyticsSummaryError', message: err.message });
@@ -432,19 +432,21 @@ async function runSaQuery(oauth2Client, selected, body) {
 // GET /api/gsc/analytics/pages
 router.get('/analytics/pages', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = await ensureGscContext(req);
-    const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType } = req.query;
+    const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType, siteUrl: siteParam } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
+    const site = siteParam || await gscAuth.getUserSelection(req.user.id);
+    if (!site) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
     // Prefer DB
-    if (await isCovered(selected, st, 'page', range.endDate)) {
-      const data = await groupByDimFromDb('gscPagesDaily', 'page', selected, st, range, startRow, rowLimit);
+    if (await isCovered(site, st, 'page', range.endDate)) {
+      const data = await groupByDimFromDb('gscPagesDaily', 'page', site, st, range, startRow, rowLimit);
       return res.json({ success: true, range, data, source: 'db' });
     }
     if (process.env.GSC_DB_ONLY === 'true') {
-      return respondNotReady(req, res, selected, st);
+      return respondNotReady(req, res, site, st);
     }
-    const rows = await runSaQuery(oauth2Client, selected, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['page'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
+    const { oauth2Client } = await ensureGscContext(req);
+    const rows = await runSaQuery(oauth2Client, site, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['page'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
     const data = rows.map(r => ({ page: r.keys?.[0], clicks: r.clicks||0, impressions: r.impressions||0, ctr: r.ctr||0, position: r.position||0 }));
     res.json({ success: true, range, data, source: 'live' });
   } catch (err) {
@@ -457,18 +459,20 @@ router.get('/analytics/pages', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/queries
 router.get('/analytics/queries', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = await ensureGscContext(req);
-    const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType } = req.query;
+    const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType, siteUrl: siteParam } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
-    if (await isCovered(selected, st, 'query', range.endDate)) {
-      const data = await groupByDimFromDb('gscQueriesDaily', 'query', selected, st, range, startRow, rowLimit);
+    const site = siteParam || await gscAuth.getUserSelection(req.user.id);
+    if (!site) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
+    if (await isCovered(site, st, 'query', range.endDate)) {
+      const data = await groupByDimFromDb('gscQueriesDaily', 'query', site, st, range, startRow, rowLimit);
       return res.json({ success: true, range, data, source: 'db' });
     }
     if (process.env.GSC_DB_ONLY === 'true') {
-      return respondNotReady(req, res, selected, st);
+      return respondNotReady(req, res, site, st);
     }
-    const rows = await runSaQuery(oauth2Client, selected, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['query'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
+    const { oauth2Client } = await ensureGscContext(req);
+    const rows = await runSaQuery(oauth2Client, site, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['query'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
     const data = rows.map(r => ({ query: r.keys?.[0], clicks: r.clicks||0, impressions: r.impressions||0, ctr: r.ctr||0, position: r.position||0 }));
     res.json({ success: true, range, data, source: 'live' });
   } catch (err) {
@@ -510,18 +514,20 @@ router.get('/analytics/page-queries', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/device
 router.get('/analytics/device', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = await ensureGscContext(req);
-    const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType } = req.query;
+    const { startDate, endDate, rowLimit = 1000, startRow = 0, searchType, siteUrl: siteParam } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
-    if (await isCovered(selected, st, 'device', range.endDate)) {
-      const data = await groupByDimFromDb('gscDeviceDaily', 'device', selected, st, range, startRow, rowLimit);
+    const site = siteParam || await gscAuth.getUserSelection(req.user.id);
+    if (!site) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
+    if (await isCovered(site, st, 'device', range.endDate)) {
+      const data = await groupByDimFromDb('gscDeviceDaily', 'device', site, st, range, startRow, rowLimit);
       return res.json({ success: true, range, data, source: 'db' });
     }
     if (process.env.GSC_DB_ONLY === 'true') {
-      return respondNotReady(req, res, selected, st);
+      return respondNotReady(req, res, site, st);
     }
-    const rows = await runSaQuery(oauth2Client, selected, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['device'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
+    const { oauth2Client } = await ensureGscContext(req);
+    const rows = await runSaQuery(oauth2Client, site, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['device'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
     const data = rows.map(r => ({ device: r.keys?.[0], clicks: r.clicks||0, impressions: r.impressions||0, ctr: r.ctr||0, position: r.position||0 }));
     res.json({ success: true, range, data, source: 'live' });
   } catch (err) {
@@ -534,18 +540,20 @@ router.get('/analytics/device', requireAuth, async (req, res) => {
 // GET /api/gsc/analytics/country
 router.get('/analytics/country', requireAuth, async (req, res) => {
   try {
-    const { oauth2Client, selected } = await ensureGscContext(req);
-    const { startDate, endDate, rowLimit = 250, startRow = 0, searchType } = req.query;
+    const { startDate, endDate, rowLimit = 250, startRow = 0, searchType, siteUrl: siteParam } = req.query;
     const range = getDefaultRange(startDate, endDate);
     const st = getSearchType(searchType);
-    if (await isCovered(selected, st, 'country', range.endDate)) {
-      const data = await groupByDimFromDb('gscCountryDaily', 'country', selected, st, range, startRow, rowLimit);
+    const site = siteParam || await gscAuth.getUserSelection(req.user.id);
+    if (!site) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
+    if (await isCovered(site, st, 'country', range.endDate)) {
+      const data = await groupByDimFromDb('gscCountryDaily', 'country', site, st, range, startRow, rowLimit);
       return res.json({ success: true, range, data, source: 'db' });
     }
     if (process.env.GSC_DB_ONLY === 'true') {
-      return respondNotReady(req, res, selected, st);
+      return respondNotReady(req, res, site, st);
     }
-    const rows = await runSaQuery(oauth2Client, selected, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['country'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
+    const { oauth2Client } = await ensureGscContext(req);
+    const rows = await runSaQuery(oauth2Client, site, { startDate: range.startDate, endDate: range.endDate, searchType: st, dataState: 'all', dimensions: ['country'], rowLimit: Number(rowLimit), startRow: Number(startRow) });
     const data = rows.map(r => ({ country: r.keys?.[0], clicks: r.clicks||0, impressions: r.impressions||0, ctr: r.ctr||0, position: r.position||0 }));
     res.json({ success: true, range, data, source: 'live' });
   } catch (err) {

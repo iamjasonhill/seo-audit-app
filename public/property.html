@@ -471,6 +471,7 @@
         params.append('startDate', startEl.value);
         params.append('endDate', endEl.value);
         params.append('searchType', typeEl.value);
+        params.append('siteUrl', qs('site'));
         params.append('rowLimit', String(rowLimit));
         params.append('startRow', String(startRow));
         return `${endpoint}?${params.toString()}`;
