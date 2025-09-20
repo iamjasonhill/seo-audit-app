@@ -118,13 +118,32 @@ class BingApiClient {
    */
   async getDailyTotals(siteUrl, startDate, endDate, searchType = 'web') {
     this.requireKey();
-    // Use GetRankAndTrafficStats for daily totals as per the research
-    const url = `${this.baseUrl}/GetRankAndTrafficStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}`;
-    logger.info(`Bing API GetRankAndTrafficStats URL: ${url}`);
-    const resp = await axios.get(url);
-    logger.info(`Bing API GetRankAndTrafficStats response:`, JSON.stringify(resp.data, null, 2));
-    const data = resp.data || {};
-    return data.d || [];
+    // Try different parameter formats for GetRankAndTrafficStats
+    const possibleUrls = [
+      `${this.baseUrl}/GetRankAndTrafficStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}`,
+      `${this.baseUrl}/GetRankAndTrafficStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`,
+      `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}`,
+      `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`
+    ];
+    
+    for (const url of possibleUrls) {
+      try {
+        logger.info(`Trying Bing API URL: ${url}`);
+        const resp = await axios.get(url);
+        logger.info(`Bing API response status: ${resp.status}`);
+        logger.info(`Bing API response data:`, JSON.stringify(resp.data, null, 2));
+        const data = resp.data || {};
+        if (data.d && data.d.length > 0) {
+          logger.info(`Found data with URL: ${url}`);
+          return data.d;
+        }
+      } catch (error) {
+        logger.warn(`URL failed: ${url}`, error.message);
+      }
+    }
+    
+    logger.warn('No working daily totals URL found');
+    return [];
   }
 }
 
