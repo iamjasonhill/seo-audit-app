@@ -138,12 +138,43 @@ class BingScheduler {
     const prop = await this.findNextDueProperty();
     if (!prop) return; // nothing due
     const { userId, siteUrl } = prop;
-    logger.info(`Bing Scheduler: syncing ${siteUrl} for user ${userId}`);
+    logger.info(`Bing Scheduler: processing ${siteUrl} for user ${userId}`);
     
     try {
       const bingApi = await ensureBingApiClient(userId);
 
-      // Decide ranges per type
+      // Check if this is a first-time sync (no previous sync)
+      const isFirstSync = !prop.last_full_sync_at;
+      
+      if (isFirstSync) {
+        logger.info(`Bing Scheduler: First sync detected for ${siteUrl}, performing full 24-month backfill`);
+        
+        // Perform full backfill for first sync
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setMonth(startDate.getMonth() - 24);
+        
+        try {
+          const results = await bingIngest.backfillSite(siteUrl, startDate, endDate);
+          logger.info(`Bing Scheduler: Completed 24-month backfill for ${siteUrl} - ${JSON.stringify(results)}`);
+        } catch (error) {
+          logger.error(`Bing Scheduler: Error during backfill for ${siteUrl}:`, error.message);
+          throw error;
+        }
+        
+        // Schedule next sync in regular interval
+        const next = new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000);
+        await databaseService.prisma.$executeRawUnsafe(`
+          UPDATE bing_user_property 
+          SET last_full_sync_at = NOW(), next_sync_due_at = $1, updated_at = NOW()
+          WHERE id = $2
+        `, next, prop.id);
+        
+        logger.info(`Bing Scheduler: ${siteUrl} backfill complete, next sync scheduled for ${next.toISOString()}`);
+        return;
+      }
+
+      // Regular sync for subsequent runs
       const tasks = [];
       for (const st of SEARCH_TYPES) {
         const win = await computeWindow(siteUrl, st);
@@ -158,6 +189,7 @@ class BingScheduler {
           SET last_full_sync_at = NOW(), next_sync_due_at = $1, updated_at = NOW()
           WHERE id = $2
         `, next, prop.id);
+        logger.info(`Bing Scheduler: ${siteUrl} is up to date, next sync scheduled for ${next.toISOString()}`);
         return;
       }
 
@@ -211,14 +243,17 @@ class BingScheduler {
         WHERE id = $2
       `, next, prop.id);
       
+      logger.info(`Bing Scheduler: ${siteUrl} sync complete, next sync scheduled for ${next.toISOString()}`);
+      
     } catch (e) {
       logger.error('Bing Scheduler domain sync error:', e.message);
       // Backoff 15 minutes
       const next = new Date(Date.now() + 15*60*1000);
-      await databaseService.prisma.bingUserProperty.update({ 
-        where: { id: prop.id }, 
-        data: { nextSyncDueAt: next } 
-      });
+      await databaseService.prisma.$executeRawUnsafe(`
+        UPDATE bing_user_property 
+        SET next_sync_due_at = $1, updated_at = NOW()
+        WHERE id = $2
+      `, next, prop.id);
     }
   }
 

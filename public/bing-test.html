@@ -176,6 +176,16 @@
         <small class="form-text text-muted">Delay between adding each property to avoid conflicts</small>
       </div>
       
+      <div class="alert alert-info">
+        <strong>📋 What happens when you add properties:</strong>
+        <ul class="mb-0 mt-2">
+          <li><strong>First Sync:</strong> Each property gets a full 24-month backfill</li>
+          <li><strong>Staggered Processing:</strong> Properties are processed one at a time with delays</li>
+          <li><strong>Ongoing Sync:</strong> After backfill, properties sync every 24 hours</li>
+          <li><strong>No Timeouts:</strong> Each property processes independently</li>
+        </ul>
+      </div>
+      
       <button class="btn btn-success" id="addAllToSchedulerBtn">
         <i class="fas fa-plus"></i> Add All Properties to Scheduler
       </button>
