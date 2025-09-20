@@ -43,7 +43,7 @@ class BingIngestService {
     try {
       await databaseService.prisma.bingSyncStatus.upsert({
         where: {
-          unique_bing_sync_status: {
+          siteUrl_searchType_dimension: {
             siteUrl,
             searchType,
             dimension
