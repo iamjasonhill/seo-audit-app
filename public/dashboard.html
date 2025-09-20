@@ -659,18 +659,20 @@
                     const resp = await fetch('/api/gsc/sync/properties', { credentials:'include' });
                     const data = await resp.json();
                     if (!resp.ok || !data.success) throw new Error(data.message || 'Failed to load');
+                    const isAdmin = !!data.isAdmin;
                     const rows = (data.properties||[]).sort((a,b)=> (a.priorityOrder||0)-(b.priorityOrder||0));
                     if (!rows.length) { host.innerHTML = '<p>No properties registered yet. Click “List Properties” above to register all.</p>'; return; }
                     const fmt = (d)=> d ? new Date(d).toLocaleString(undefined,{dateStyle:'short',timeStyle:'short'}) : '—';
                     const link = (site)=> site.startsWith('sc-domain:') ? `/property?site=${encodeURIComponent(site)}` : `/property?site=${encodeURIComponent(site)}`;
                     const table = `
                         <table class="history-table">
-                          <thead><tr><th>#</th><th>Property</th><th>Enabled</th><th>Last Full Sync</th><th>Next Due</th><th>Actions</th></tr></thead>
+                          <thead><tr><th>#</th><th>Property</th>${isAdmin?'<th>User</th>':''}<th>Enabled</th><th>Last Full Sync</th><th>Next Due</th><th>Actions</th></tr></thead>
                           <tbody>
                           ${rows.map(r=>`
                             <tr>
                               <td>${r.priorityOrder ?? 0}</td>
                               <td><a class="view-audit-btn" href="${link(r.siteUrl)}" target="_blank">${r.siteUrl}</a></td>
+                              ${isAdmin?`<td>${r.owner?.email || r.owner?.username || r.userId || ''}</td>`:''}
                               <td>${r.enabled ? 'Yes' : 'No'}</td>
                               <td>${fmt(r.lastFullSyncAt)}</td>
                               <td>${fmt(r.nextSyncDueAt)}</td>
@@ -687,7 +689,11 @@
                             const siteUrl = decodeURIComponent(btn.getAttribute('data-sync-now')||'');
                             btn.disabled = true; const orig = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Queuing…';
                             try {
-                                const r = await fetch('/api/gsc/sync/register', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ siteUrl, enabled:true }) });
+                                const payload = { siteUrl, enabled:true };
+                                // If admin clicked a row that has owner info, target that user
+                                const row = rows.find(x => x.siteUrl === siteUrl);
+                                if (isAdmin && row && row.userId) payload.userId = row.userId;
+                                const r = await fetch('/api/gsc/sync/register', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify(payload) });
                                 const d = await r.json(); if (!r.ok || !d.success) throw new Error(d.message||'Failed');
                                 await this.loadSyncRegistry();
                                 this.showSuccess('Queued sync for '+siteUrl);

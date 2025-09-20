@@ -675,12 +675,19 @@ router.get('/scheduler/tick', async (req, res) => {
 // Register a property for background syncing
 router.post('/sync/register', requireAuth, async (req, res) => {
   try {
-    const { siteUrl, priorityOrder = 0, syncIntervalHours = 24, enabled = true } = req.body || {};
+    const { siteUrl, priorityOrder = 0, syncIntervalHours = 24, enabled = true, userId: overrideUserId } = req.body || {};
     if (!siteUrl) return res.status(400).json({ error: 'BadRequest', message: 'siteUrl is required' });
+    // Admin can register on behalf of another user by providing userId
+    let ownerUserId = req.user.id;
+    if (overrideUserId && Number(overrideUserId) !== req.user.id) {
+      const me = await databaseService.prisma.user.findUnique({ where: { id: req.user.id } }).catch(()=>null);
+      if (!me || me.role !== 'admin') return res.status(403).json({ error: 'Forbidden', message: 'Admin only' });
+      ownerUserId = Number(overrideUserId);
+    }
     await databaseService.prisma.gscUserProperty.upsert({
-      where: { userId_siteUrl: { userId: req.user.id, siteUrl } },
+      where: { userId_siteUrl: { userId: ownerUserId, siteUrl } },
       update: { enabled, priorityOrder, syncIntervalHours, nextSyncDueAt: new Date() },
-      create: { userId: req.user.id, siteUrl, enabled, priorityOrder, syncIntervalHours, nextSyncDueAt: new Date() },
+      create: { userId: ownerUserId, siteUrl, enabled, priorityOrder, syncIntervalHours, nextSyncDueAt: new Date() },
     });
     try { gscScheduler.tick().catch(()=>{}); } catch (_) {}
     res.json({ success: true });
@@ -693,8 +700,25 @@ router.post('/sync/register', requireAuth, async (req, res) => {
 // List registered properties
 router.get('/sync/properties', requireAuth, async (req, res) => {
   try {
-    const rows = await databaseService.prisma.gscUserProperty.findMany({ where: { userId: req.user.id }, orderBy: [ { priorityOrder: 'asc' } ] });
-    res.json({ success: true, properties: rows });
+    // Determine caller role
+    const me = await databaseService.prisma.user.findUnique({ where: { id: req.user.id } }).catch(()=>null);
+    const isAdmin = !!me && me.role === 'admin';
+    const rows = await databaseService.prisma.gscUserProperty.findMany({
+      where: isAdmin ? {} : { userId: req.user.id },
+      orderBy: [ { priorityOrder: 'asc' } ]
+    });
+    // Attach owner info for admin view
+    let properties = rows;
+    if (isAdmin) {
+      const userIds = Array.from(new Set(rows.map(r => r.userId)));
+      const users = await databaseService.prisma.user.findMany({ where: { id: { in: userIds } } });
+      const idToUser = new Map(users.map(u => [u.id, u]));
+      properties = rows.map(r => ({
+        ...r,
+        owner: (() => { const u = idToUser.get(r.userId); return u ? { id: u.id, email: u.email, username: u.username } : null; })()
+      }));
+    }
+    res.json({ success: true, properties, isAdmin });
   } catch (err) {
     logger.error('GSC sync properties error:', err.message);
     res.status(500).json({ error: 'SyncPropertiesError', message: err.message });
