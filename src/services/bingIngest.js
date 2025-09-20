@@ -74,7 +74,7 @@ class BingIngestService {
   /**
    * Sync daily totals for a site
    */
-  async syncDailyTotals(siteUrl, searchType = 'web', daysBack = 30) {
+  async syncDailyTotals(siteUrl, searchType = 'web', daysBack = 30, startDateParam = null, endDateParam = null) {
     const dimension = 'totals';
     logger.info(`Starting Bing daily totals sync for ${siteUrl} (${searchType})`);
 
@@ -82,9 +82,16 @@ class BingIngestService {
       await this.updateSyncStatus(siteUrl, searchType, dimension, 'running');
 
       const client = new BingApiClient(this.apiKey);
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - daysBack);
+      
+      let startDate, endDate;
+      if (startDateParam && endDateParam) {
+        startDate = new Date(startDateParam);
+        endDate = new Date(endDateParam);
+      } else {
+        endDate = new Date();
+        startDate = new Date();
+        startDate.setDate(endDate.getDate() - daysBack);
+      }
 
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
@@ -188,7 +195,7 @@ class BingIngestService {
   /**
    * Sync query data for a site
    */
-  async syncQueryData(siteUrl, searchType = 'web', daysBack = 7) {
+  async syncQueryData(siteUrl, searchType = 'web', daysBack = 7, startDateParam = null, endDateParam = null) {
     const dimension = 'query';
     logger.info(`Starting Bing query data sync for ${siteUrl} (${searchType})`);
 
@@ -196,9 +203,16 @@ class BingIngestService {
       await this.updateSyncStatus(siteUrl, searchType, dimension, 'running');
 
       const client = new BingApiClient(this.apiKey);
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - daysBack);
+      
+      let startDate, endDate;
+      if (startDateParam && endDateParam) {
+        startDate = new Date(startDateParam);
+        endDate = new Date(endDateParam);
+      } else {
+        endDate = new Date();
+        startDate = new Date();
+        startDate.setDate(endDate.getDate() - daysBack);
+      }
 
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
@@ -302,7 +316,7 @@ class BingIngestService {
   /**
    * Sync page data for a site
    */
-  async syncPageData(siteUrl, searchType = 'web', daysBack = 7) {
+  async syncPageData(siteUrl, searchType = 'web', daysBack = 7, startDateParam = null, endDateParam = null) {
     const dimension = 'page';
     logger.info(`Starting Bing page data sync for ${siteUrl} (${searchType})`);
 
@@ -310,9 +324,16 @@ class BingIngestService {
       await this.updateSyncStatus(siteUrl, searchType, dimension, 'running');
 
       const client = new BingApiClient(this.apiKey);
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - daysBack);
+      
+      let startDate, endDate;
+      if (startDateParam && endDateParam) {
+        startDate = new Date(startDateParam);
+        endDate = new Date(endDateParam);
+      } else {
+        endDate = new Date();
+        startDate = new Date();
+        startDate.setDate(endDate.getDate() - daysBack);
+      }
 
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
@@ -419,6 +440,8 @@ class BingIngestService {
   async syncSite(siteUrl, searchType = 'web', options = {}) {
     const { 
       daysBack = 30, 
+      startDate,
+      endDate,
       includeQueries = true, 
       includePages = true,
       includeTotals = true 
@@ -434,15 +457,27 @@ class BingIngestService {
 
     try {
       if (includeTotals) {
-        results.totals = await this.syncDailyTotals(siteUrl, searchType, daysBack);
+        if (startDate && endDate) {
+          results.totals = await this.syncDailyTotals(siteUrl, searchType, null, startDate, endDate);
+        } else {
+          results.totals = await this.syncDailyTotals(siteUrl, searchType, daysBack);
+        }
       }
 
       if (includeQueries) {
-        results.queries = await this.syncQueryData(siteUrl, searchType, Math.min(daysBack, 7));
+        if (startDate && endDate) {
+          results.queries = await this.syncQueryData(siteUrl, searchType, null, startDate, endDate);
+        } else {
+          results.queries = await this.syncQueryData(siteUrl, searchType, Math.min(daysBack, 7));
+        }
       }
 
       if (includePages) {
-        results.pages = await this.syncPageData(siteUrl, searchType, Math.min(daysBack, 7));
+        if (startDate && endDate) {
+          results.pages = await this.syncPageData(siteUrl, searchType, null, startDate, endDate);
+        } else {
+          results.pages = await this.syncPageData(siteUrl, searchType, Math.min(daysBack, 7));
+        }
       }
 
       logger.info(`Bing sync completed for ${siteUrl}:`, results);
@@ -461,15 +496,74 @@ class BingIngestService {
     logger.info(`Starting Bing backfill for ${siteUrl} (${monthsBack} months)`);
 
     try {
-      const results = await this.syncSite(siteUrl, searchType, {
-        daysBack: monthsBack * 30,
-        includeQueries: true,  // Include queries data
-        includePages: true,    // Include pages data
-        includeTotals: true    // Backfill totals for full period
-      });
+      // Process in weekly chunks to avoid timeouts
+      const chunkSizeDays = 7; // Process 1 week at a time
+      const totalDays = monthsBack * 30;
+      const totalChunks = Math.ceil(totalDays / chunkSizeDays);
+      
+      logger.info(`Bing backfill: Processing ${totalChunks} chunks of ${chunkSizeDays} days each`);
+      
+      let totalResults = {
+        totals: { success: true, recordsProcessed: 0 },
+        queries: { success: true, recordsProcessed: 0 },
+        pages: { success: true, recordsProcessed: 0 }
+      };
+      
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - monthsBack);
+      
+      // Process each chunk
+      for (let chunk = 0; chunk < totalChunks; chunk++) {
+        const chunkStart = new Date(startDate);
+        chunkStart.setDate(startDate.getDate() + (chunk * chunkSizeDays));
+        
+        const chunkEnd = new Date(chunkStart);
+        chunkEnd.setDate(chunkStart.getDate() + chunkSizeDays - 1);
+        
+        // Don't go beyond the end date
+        if (chunkEnd > endDate) {
+          chunkEnd.setTime(endDate.getTime());
+        }
+        
+        logger.info(`Bing backfill: Processing chunk ${chunk + 1}/${totalChunks} (${chunkStart.toISOString().split('T')[0]} to ${chunkEnd.toISOString().split('T')[0]})`);
+        
+        try {
+          const chunkResults = await this.syncSite(siteUrl, searchType, {
+            startDate: chunkStart,
+            endDate: chunkEnd,
+            includeQueries: true,
+            includePages: true,
+            includeTotals: true
+          });
+          
+          // Accumulate results
+          if (chunkResults.totals) {
+            totalResults.totals.recordsProcessed += chunkResults.totals.recordsProcessed || 0;
+          }
+          if (chunkResults.queries) {
+            totalResults.queries.recordsProcessed += chunkResults.queries.recordsProcessed || 0;
+          }
+          if (chunkResults.pages) {
+            totalResults.pages.recordsProcessed += chunkResults.pages.recordsProcessed || 0;
+          }
+          
+          logger.info(`Bing backfill: Chunk ${chunk + 1} completed - Totals: ${chunkResults.totals?.recordsProcessed || 0}, Queries: ${chunkResults.queries?.recordsProcessed || 0}, Pages: ${chunkResults.pages?.recordsProcessed || 0}`);
+          
+          // Add a small delay between chunks to avoid overwhelming the API
+          if (chunk < totalChunks - 1) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+          }
+          
+        } catch (chunkError) {
+          logger.error(`Bing backfill: Error in chunk ${chunk + 1}:`, chunkError.message);
+          // Continue with next chunk instead of failing completely
+          continue;
+        }
+      }
 
-      logger.info(`Bing backfill completed for ${siteUrl}`);
-      return results;
+      logger.info(`Bing backfill completed for ${siteUrl} - Total: ${totalResults.totals.recordsProcessed} totals, ${totalResults.queries.recordsProcessed} queries, ${totalResults.pages.recordsProcessed} pages`);
+      return totalResults;
 
     } catch (error) {
       logger.error(`Bing backfill failed for ${siteUrl}:`, error);

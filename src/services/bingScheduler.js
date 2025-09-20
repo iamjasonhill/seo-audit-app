@@ -155,7 +155,7 @@ class BingScheduler {
         startDate.setMonth(startDate.getMonth() - 24);
         
         try {
-          const results = await bingIngest.backfillSite(siteUrl, startDate, endDate);
+          const results = await bingIngest.backfillSite(siteUrl, 'web', 24);
           logger.info(`Bing Scheduler: Completed 24-month backfill for ${siteUrl} - ${JSON.stringify(results)}`);
         } catch (error) {
           logger.error(`Bing Scheduler: Error during backfill for ${siteUrl}:`, error.message);
@@ -210,7 +210,8 @@ class BingScheduler {
             endDate;
           
           const results = await bingIngest.syncSite(siteUrl, task.st, {
-            daysBack: Math.ceil((actualEndDate - startDate) / (1000 * 60 * 60 * 24)),
+            startDate: startDate,
+            endDate: actualEndDate,
             includeQueries: true,  // Include queries data
             includePages: true,    // Include pages data
             includeTotals: true
