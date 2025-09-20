@@ -91,14 +91,15 @@
         const items = d.items||[];
         if (!items.length) { host.innerHTML = '<p class="muted">No user properties registered.</p>'; return; }
         const rows = items.map(x=>{
-          const list = (x.properties||[]).map(p=>`<li>${p.siteUrl} ${p.enabled?'' : '<span class=\'muted\'>(disabled)</span>'}</li>`).join('');
+          const props = (x.properties||[]).filter(p => String(p.siteUrl||'').startsWith('sc-domain:'));
+          const list = props.map(p=>`<li>${p.siteUrl} ${p.enabled?'' : '<span class=\'muted\'>(disabled)</span>'}</li>`).join('');
           return `<tr>
             <td>${x.user.id}</td>
             <td>${x.user.email}</td>
             <td>${x.user.username||''}</td>
             <td>${x.user.role}</td>
             <td>${x.user.status}</td>
-            <td>${(x.properties||[]).length}</td>
+            <td>${props.length}</td>
             <td><ul style="margin-left:1rem">${list||'<li class=\'muted\'>—</li>'}</ul></td>
           </tr>`;
         }).join('');
