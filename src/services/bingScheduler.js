@@ -351,6 +351,7 @@ class BingScheduler {
           }
           
           logger.info(`Processing site ${i + 1}/${sites.length}: ${site.siteUrl}`);
+          logger.info(`Site object: ${JSON.stringify(site)}`);
           
           // Check if already registered
           const existing = await databaseService.prisma.$queryRawUnsafe(`
@@ -367,10 +368,14 @@ class BingScheduler {
           const priorityOrder = i;
           const nextSyncDueAt = new Date(now.getTime() + (i * 5 * 60 * 1000)); // 5 minutes apart
           
+          logger.info(`Inserting site into database: userId=${userId}, siteUrl=${site.siteUrl}, priority=${priorityOrder}`);
+          
           await databaseService.prisma.$executeRawUnsafe(`
             INSERT INTO bing_user_property (user_id, site_url, enabled, sync_interval_hours, priority_order, next_sync_due_at, created_at, updated_at)
             VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
           `, userId, site.siteUrl, true, 24, priorityOrder, nextSyncDueAt);
+          
+          logger.info(`Successfully inserted site: ${site.siteUrl}`);
           
           registeredSites.push({
             siteUrl: site.siteUrl,
@@ -403,6 +408,8 @@ class BingScheduler {
       const whereClause = isAdmin ? '' : 'WHERE user_id = $1';
       const params = isAdmin ? [] : [userId];
       
+      logger.info(`Getting registered properties for user ${userId}, isAdmin: ${isAdmin}`);
+      
       const properties = await databaseService.prisma.$queryRawUnsafe(`
         SELECT bup.*, u.email, u.username
         FROM bing_user_property bup
@@ -410,6 +417,9 @@ class BingScheduler {
         ${whereClause}
         ORDER BY bup.priority_order ASC, bup.next_sync_due_at ASC
       `, ...params);
+      
+      logger.info(`Retrieved ${properties.length} properties from database`);
+      logger.info(`First property: ${JSON.stringify(properties[0] || {})}`);
       
       return properties;
     } catch (error) {
