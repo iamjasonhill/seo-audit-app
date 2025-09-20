@@ -327,11 +327,21 @@
             </div>
 
             <div class="card">
-                <h2><i class="fas fa-database"></i> Sync Registry</h2>
+                <h2><i class="fas fa-database"></i> Google Search Console Sync Registry</h2>
                 <div style="margin:.25rem 0 .5rem 0">
                     <button id="syncRegRefresh" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-rotate"></i> Refresh</button>
                 </div>
                 <div id="syncRegistry"></div>
+            </div>
+
+            <div class="card">
+                <h2><i class="fab fa-microsoft"></i> Bing Webmaster Tools Sync Registry</h2>
+                <div style="margin:.25rem 0 .5rem 0; display:flex; gap:.5rem; align-items:center; flex-wrap:wrap;">
+                    <button id="bingSyncRefresh" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-rotate"></i> Refresh</button>
+                    <button id="bingDiscoverBtn" class="audit-btn" style="width:auto;background:#0078d4"><i class="fas fa-search"></i> Discover Domains</button>
+                    <button id="bingSchedulerTick" class="audit-btn" style="width:auto;background:#28a745"><i class="fas fa-play"></i> Manual Sync</button>
+                </div>
+                <div id="bingSyncRegistry"></div>
             </div>
 
             <div class="card">
@@ -466,6 +476,7 @@
                 
                 this.init();
                 this.loadSyncRegistry();
+                this.initBingSyncRegistry();
 
                 // Clear any autofilled values shortly after load
                 setTimeout(() => {
@@ -1455,6 +1466,232 @@
             hideMessages() {
                 this.errorMessage.style.display = 'none';
                 this.successMessage.style.display = 'none';
+            }
+
+            // Bing Sync Registry functionality
+            initBingSyncRegistry() {
+                const refreshBtn = document.getElementById('bingSyncRefresh');
+                const discoverBtn = document.getElementById('bingDiscoverBtn');
+                const schedulerTickBtn = document.getElementById('bingSchedulerTick');
+
+                if (refreshBtn) {
+                    refreshBtn.addEventListener('click', () => this.loadBingSyncRegistry());
+                }
+
+                if (discoverBtn) {
+                    discoverBtn.addEventListener('click', () => this.discoverBingDomains());
+                }
+
+                if (schedulerTickBtn) {
+                    schedulerTickBtn.addEventListener('click', () => this.triggerBingScheduler());
+                }
+
+                // Load Bing sync registry on initialization
+                this.loadBingSyncRegistry();
+            }
+
+            async loadBingSyncRegistry() {
+                const host = document.getElementById('bingSyncRegistry');
+                if (!host) return;
+                
+                host.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading Bing sync registry…</p>';
+                
+                try {
+                    const resp = await fetch('/api/bing/sync/properties', { credentials: 'include' });
+                    const data = await resp.json();
+                    
+                    if (!resp.ok || !data.success) {
+                        throw new Error(data.message || 'Failed to load Bing sync registry');
+                    }
+                    
+                    const isAdmin = !!data.isAdmin;
+                    const properties = data.properties || [];
+                    
+                    if (properties.length === 0) {
+                        host.innerHTML = `
+                            <p>No Bing domains registered yet.</p>
+                            <p style="margin-top: 0.5rem; color: #666;">
+                                Click "Discover Domains" to automatically find and register all available Bing Webmaster Tools domains.
+                            </p>
+                        `;
+                        return;
+                    }
+
+                    // Sort by priority order
+                    properties.sort((a, b) => (a.priorityOrder || 0) - (b.priorityOrder || 0));
+
+                    const fmt = (d) => d ? new Date(d).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—';
+                    
+                    const table = `
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Domain</th>
+                                    ${isAdmin ? '<th>User</th>' : ''}
+                                    <th>Enabled</th>
+                                    <th>Last Full Sync</th>
+                                    <th>Next Due</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${properties.map(prop => `
+                                    <tr>
+                                        <td>${prop.priorityOrder ?? 0}</td>
+                                        <td>
+                                            <a href="/property?site=${encodeURIComponent(prop.siteUrl)}" class="view-audit-btn" target="_blank">
+                                                ${prop.siteUrl}
+                                            </a>
+                                        </td>
+                                        ${isAdmin ? `<td>${prop.email || prop.username || prop.userId || ''}</td>` : ''}
+                                        <td>${prop.enabled ? 'Yes' : 'No'}</td>
+                                        <td>${fmt(prop.lastFullSyncAt)}</td>
+                                        <td>${fmt(prop.nextSyncDueAt)}</td>
+                                        <td>
+                                            <button class="audit-btn" data-bing-sync-now="${encodeURIComponent(prop.siteUrl)}" 
+                                                    style="width:auto;background:#198754; margin-right:0.25rem">
+                                                <i class="fas fa-forward"></i> Sync now
+                                            </button>
+                                            <button class="delete-btn" data-bing-unregister="${encodeURIComponent(prop.siteUrl)}" 
+                                                    style="width:auto; margin-left:0.25rem">
+                                                <i class="fas fa-trash"></i> Remove
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                    
+                    host.innerHTML = table;
+                    
+                    // Bind sync now buttons
+                    host.querySelectorAll('[data-bing-sync-now]').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            const siteUrl = decodeURIComponent(btn.getAttribute('data-bing-sync-now') || '');
+                            btn.disabled = true;
+                            const orig = btn.innerHTML;
+                            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Queuing…';
+                            
+                            try {
+                                const payload = { siteUrl, enabled: true };
+                                const r = await fetch('/api/bing/sync/register', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'include',
+                                    body: JSON.stringify(payload)
+                                });
+                                const d = await r.json();
+                                if (!r.ok || !d.success) throw new Error(d.message || 'Failed to queue sync');
+                                
+                                await this.loadBingSyncRegistry();
+                                this.showSuccess('Queued sync for ' + siteUrl);
+                            } catch (err) {
+                                this.showError(err.message);
+                            } finally {
+                                btn.disabled = false;
+                                btn.innerHTML = orig;
+                            }
+                        });
+                    });
+
+                    // Bind unregister buttons
+                    host.querySelectorAll('[data-bing-unregister]').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            const siteUrl = decodeURIComponent(btn.getAttribute('data-bing-unregister') || '');
+                            
+                            if (!confirm(`Are you sure you want to remove ${siteUrl} from the Bing sync registry?`)) {
+                                return;
+                            }
+                            
+                            btn.disabled = true;
+                            const orig = btn.innerHTML;
+                            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Removing…';
+                            
+                            try {
+                                const r = await fetch('/api/bing/sync/unregister', {
+                                    method: 'DELETE',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'include',
+                                    body: JSON.stringify({ siteUrl })
+                                });
+                                const d = await r.json();
+                                if (!r.ok || !d.success) throw new Error(d.message || 'Failed to remove domain');
+                                
+                                await this.loadBingSyncRegistry();
+                                this.showSuccess('Removed ' + siteUrl + ' from sync registry');
+                            } catch (err) {
+                                this.showError(err.message);
+                            } finally {
+                                btn.disabled = false;
+                                btn.innerHTML = orig;
+                            }
+                        });
+                    });
+                    
+                } catch (err) {
+                    host.innerHTML = `<p style="color:#c33">${err.message}</p>`;
+                }
+            }
+
+            async discoverBingDomains() {
+                const discoverBtn = document.getElementById('bingDiscoverBtn');
+                if (!discoverBtn) return;
+                
+                discoverBtn.disabled = true;
+                const orig = discoverBtn.innerHTML;
+                discoverBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Discovering...';
+                
+                try {
+                    const resp = await fetch('/api/bing/sync/discover', {
+                        method: 'POST',
+                        credentials: 'include'
+                    });
+                    const data = await resp.json();
+                    
+                    if (!resp.ok || !data.success) {
+                        throw new Error(data.message || 'Failed to discover domains');
+                    }
+                    
+                    this.showSuccess(data.message || `Discovered and registered ${data.registeredSites?.length || 0} Bing domains`);
+                    await this.loadBingSyncRegistry();
+                    
+                } catch (err) {
+                    this.showError(err.message);
+                } finally {
+                    discoverBtn.disabled = false;
+                    discoverBtn.innerHTML = orig;
+                }
+            }
+
+            async triggerBingScheduler() {
+                const tickBtn = document.getElementById('bingSchedulerTick');
+                if (!tickBtn) return;
+                
+                tickBtn.disabled = true;
+                const orig = tickBtn.innerHTML;
+                tickBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+                
+                try {
+                    const resp = await fetch('/api/bing/scheduler/tick', {
+                        credentials: 'include'
+                    });
+                    const data = await resp.json();
+                    
+                    if (!resp.ok || !data.success) {
+                        throw new Error(data.message || 'Failed to trigger scheduler');
+                    }
+                    
+                    this.showSuccess('Bing scheduler tick executed successfully');
+                    await this.loadBingSyncRegistry();
+                    
+                } catch (err) {
+                    this.showError(err.message);
+                } finally {
+                    tickBtn.disabled = false;
+                    tickBtn.innerHTML = orig;
+                }
             }
         }
 
