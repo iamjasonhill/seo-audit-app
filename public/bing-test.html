@@ -53,7 +53,7 @@
         <label for="apiKey">Bing API Key</label>
         <input type="text" id="apiKey" placeholder="Enter your Bing API key">
       </div>
-      <button class="btn" onclick="testApiKey()">
+      <button class="btn" id="testApiKeyBtn">
         <i class="fas fa-check"></i> Test API Key
       </button>
       <div id="apiKeyResult" class="result" style="display:none;"></div>
@@ -62,7 +62,7 @@
     <!-- Properties List -->
     <div class="card">
       <h3><i class="fas fa-list"></i> Available Properties</h3>
-      <button class="btn" onclick="loadProperties()">
+      <button class="btn" id="loadPropertiesBtn">
         <i class="fas fa-sync"></i> Load Properties
       </button>
       <div id="propertiesResult" class="result" style="display:none;"></div>
@@ -100,7 +100,7 @@
           </div>
         </div>
       </div>
-      <button class="btn btn-success" onclick="syncData()">
+      <button class="btn btn-success" id="syncDataBtn">
         <i class="fas fa-sync"></i> Sync Data
       </button>
       <div id="syncResult" class="result" style="display:none;"></div>
@@ -123,7 +123,7 @@
           </div>
         </div>
       </div>
-      <button class="btn btn-warning" onclick="backfillData()">
+      <button class="btn btn-warning" id="backfillDataBtn">
         <i class="fas fa-history"></i> Backfill Historical Data
       </button>
       <div id="backfillResult" class="result" style="display:none;"></div>
@@ -161,7 +161,7 @@
           </div>
         </div>
       </div>
-      <button class="btn btn-secondary" onclick="retrieveData()">
+      <button class="btn btn-secondary" id="retrieveDataBtn">
         <i class="fas fa-search"></i> Retrieve Data
       </button>
       <div id="retrieveResult" class="result" style="display:none;"></div>
@@ -170,7 +170,7 @@
     <!-- Sync Status -->
     <div class="card">
       <h3><i class="fas fa-info-circle"></i> Sync Status</h3>
-      <button class="btn btn-secondary" onclick="loadSyncStatus()">
+      <button class="btn btn-secondary" id="loadSyncStatusBtn">
         <i class="fas fa-info"></i> Check Sync Status
       </button>
       <div id="syncStatusResult" class="result" style="display:none;"></div>
@@ -245,7 +245,7 @@
     }
 
     async function loadProperties() {
-      const button = event.target;
+      const button = document.getElementById('loadPropertiesBtn');
       showLoading(button);
 
       try {
@@ -284,7 +284,7 @@
     }
 
     async function syncData() {
-      const button = event.target;
+      const button = document.getElementById('syncDataBtn');
       showLoading(button);
 
       const siteUrl = document.getElementById('syncSiteUrl').value.trim();
@@ -337,7 +337,7 @@
     }
 
     async function backfillData() {
-      const button = event.target;
+      const button = document.getElementById('backfillDataBtn');
       showLoading(button);
 
       const siteUrl = document.getElementById('backfillSiteUrl').value.trim();
@@ -383,7 +383,7 @@
     }
 
     async function retrieveData() {
-      const button = event.target;
+      const button = document.getElementById('retrieveDataBtn');
       showLoading(button);
 
       const siteUrl = document.getElementById('retrieveSiteUrl').value.trim();
@@ -428,7 +428,7 @@
     }
 
     async function loadSyncStatus() {
-      const button = event.target;
+      const button = document.getElementById('loadSyncStatusBtn');
       showLoading(button);
 
       try {
@@ -466,8 +466,16 @@
       }
     }
 
-    // Auto-fill common test URLs
+    // Auto-fill common test URLs and setup event listeners
     document.addEventListener('DOMContentLoaded', function() {
+      // Setup event listeners
+      document.getElementById('testApiKeyBtn').addEventListener('click', testApiKey);
+      document.getElementById('loadPropertiesBtn').addEventListener('click', loadProperties);
+      document.getElementById('syncDataBtn').addEventListener('click', syncData);
+      document.getElementById('backfillDataBtn').addEventListener('click', backfillData);
+      document.getElementById('retrieveDataBtn').addEventListener('click', retrieveData);
+      document.getElementById('loadSyncStatusBtn').addEventListener('click', loadSyncStatus);
+
       const testUrls = [
         'https://backloadingremovals.com.au/',
         'https://movemycar.com.au/',
@@ -476,19 +484,17 @@
       
       // Add quick fill buttons
       const syncCard = document.querySelector('.card:nth-child(3)');
-      const backfillCard = document.querySelector('.card:nth-child(4)');
-      const retrieveCard = document.querySelector('.card:nth-child(5)');
       
       testUrls.forEach(url => {
         const btn = document.createElement('button');
         btn.className = 'btn btn-secondary';
         btn.style.fontSize = '0.8rem';
         btn.innerHTML = `<i class="fas fa-link"></i> ${url.split('/')[2]}`;
-        btn.onclick = () => {
+        btn.addEventListener('click', () => {
           document.getElementById('syncSiteUrl').value = url;
           document.getElementById('backfillSiteUrl').value = url;
           document.getElementById('retrieveSiteUrl').value = url;
-        };
+        });
         syncCard.querySelector('.form-group:first-child').appendChild(btn);
       });
     });
