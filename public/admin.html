@@ -43,6 +43,15 @@
       <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-sitemap"></i> User → Domains</h3>
       <div id="userProps"></div>
     </div>
+
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fab fa-microsoft"></i> Bing Webmaster Properties</h3>
+      <div style="display:flex; gap:.5rem; align-items:center; margin-bottom:.75rem">
+        <input id="bingApiKey" type="text" placeholder="Bing API Key (optional if set in env)" style="min-width:300px">
+        <button id="loadBingBtn" class="audit-btn" style="background:#0078d4"><i class="fas fa-sync"></i> Load Bing Properties</button>
+      </div>
+      <div id="bingProps"></div>
+    </div>
   </div>
 
   <script>
@@ -112,7 +121,37 @@
         host.innerHTML = `<p class="error">${e.message}</p>`;
       }
     }
+    async function loadBingProps(){
+      const host = document.getElementById('bingProps');
+      const apiKey = document.getElementById('bingApiKey').value.trim();
+      host.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading Bing properties…</p>';
+      try {
+        const url = apiKey ? `/api/bing/properties?apiKey=${encodeURIComponent(apiKey)}` : '/api/bing/properties';
+        const d = await api(url);
+        const props = d.properties||[];
+        if (!props.length) { 
+          host.innerHTML = '<p class="muted">No Bing properties found. Make sure your API key is valid and you have verified sites in Bing Webmaster Tools.</p>'; 
+          return; 
+        }
+        const rows = props.map((p, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td><a href="${p.siteUrl}" target="_blank" style="color:#0078d4; text-decoration:none">${p.siteUrl}</a></td>
+            <td><span class="audit-btn" style="background:#28a745; padding:.25rem .5rem; font-size:.8rem"><i class="fas fa-check"></i> Verified</span></td>
+          </tr>
+        `).join('');
+        host.innerHTML = `
+          <div style="margin-bottom:.5rem; color:#666; font-size:.9rem">Found ${props.length} verified Bing properties</div>
+          <table class="history-table">
+            <thead><tr><th>#</th><th>Site URL</th><th>Status</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      } catch(e) {
+        host.innerHTML = `<p class="error">${e.message}</p>`;
+      }
+    }
     document.getElementById('refreshBtn').onclick=load;
+    document.getElementById('loadBingBtn').onclick=loadBingProps;
     document.getElementById('addBtn').onclick=async()=>{
       const email = document.getElementById('email').value.trim();
       const role = document.getElementById('role').value;
