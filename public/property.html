@@ -140,8 +140,10 @@
         }
         
         const url = `/api/bing/data/${encodeURIComponent(bingSiteUrl)}?searchType=${searchType}&startDate=${range.start}&endDate=${range.end}&dataType=totals`;
+        console.log('Bing KPIs URL:', url);
         const r = await fetch(url, { credentials:'include' }); 
         const d = await r.json();
+        console.log('Bing KPIs Response:', d);
         
         if (!r.ok || !d.success) { 
           el.innerHTML = `<p class="error">${d.message||'Failed to load Bing KPIs'}</p>`; 
@@ -799,12 +801,19 @@
       async function load(){
         out.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading…</p>';
         try {
-          const r = await fetch(buildUrl(), { credentials:'include' });
+          const url = buildUrl();
+          console.log('Bing Insights URL:', url);
+          const r = await fetch(url, { credentials:'include' });
           const d = await r.json();
+          console.log('Bing Insights Response:', d);
           if (!r.ok || !d.success) throw new Error(d.message||'Failed to load Bing data');
           if (ps) ps.textContent = 'Source: Bing Webmaster Tools data';
           render(d.data);
-        } catch(e){ out.innerHTML = `<p class="error">${e.message}</p>`; pager.innerHTML=''; }
+        } catch(e){ 
+          console.error('Bing Insights Error:', e);
+          out.innerHTML = `<p class="error">${e.message}</p>`; 
+          pager.innerHTML=''; 
+        }
       }
 
       // public hook so the top Apply button can reload current tab
