@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bing Data Extraction Test</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:#f5f7fa; color:#333; }
+    .top { background:#fff; box-shadow:0 2px 4px rgba(0,0,0,.08); padding:1rem 2rem; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:5 }
+    .container { max-width:1200px; margin:1.5rem auto; padding:0 1rem; }
+    .card { background:#fff; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,.08); padding:1rem; margin-bottom:1rem; }
+    .btn { background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%); color:#fff; border:none; border-radius:6px; padding:.5rem .75rem; cursor:pointer; display:inline-flex; align-items:center; gap:.4rem; margin:.25rem; }
+    .btn:hover { opacity:0.9; }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
+    .btn-success { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); }
+    .btn-warning { background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%); }
+    .btn-danger { background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%); }
+    .btn-secondary { background: linear-gradient(135deg, #6c757d 0%, #495057 100%); }
+    .form-group { margin-bottom:1rem; }
+    .form-group label { display:block; margin-bottom:.25rem; font-weight:500; }
+    .form-group input, .form-group select, .form-group textarea { width:100%; padding:.5rem; border:1px solid #e1e5e9; border-radius:6px; font-size:14px; }
+    .form-group textarea { min-height:100px; font-family:monospace; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:1rem; }
+    .result { background:#f8f9fa; border:1px solid #e9ecef; border-radius:6px; padding:1rem; margin-top:1rem; }
+    .result pre { background:#fff; border:1px solid #e9ecef; border-radius:4px; padding:.75rem; overflow-x:auto; font-size:12px; }
+    .status { padding:.25rem .5rem; border-radius:4px; font-size:.8rem; font-weight:500; }
+    .status.success { background:#d4edda; color:#155724; }
+    .status.error { background:#f8d7da; color:#721c24; }
+    .status.warning { background:#fff3cd; color:#856404; }
+    .status.info { background:#d1ecf1; color:#0c5460; }
+    .loading { display:none; }
+    .loading.show { display:inline-block; }
+    .site-list { max-height:200px; overflow-y:auto; border:1px solid #e9ecef; border-radius:4px; padding:.5rem; }
+    .site-item { padding:.25rem .5rem; border-bottom:1px solid #f1f3f4; cursor:pointer; }
+    .site-item:hover { background:#f8f9fa; }
+    .site-item:last-child { border-bottom:none; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <div style="font-weight:700"><i class="fab fa-microsoft"></i> Bing Data Extraction Test</div>
+    <div>
+      <a href="/admin" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Admin</a>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- API Key Configuration -->
+    <div class="card">
+      <h3><i class="fas fa-key"></i> API Configuration</h3>
+      <div class="form-group">
+        <label for="apiKey">Bing API Key</label>
+        <input type="text" id="apiKey" placeholder="Enter your Bing API key">
+      </div>
+      <button class="btn" onclick="testApiKey()">
+        <i class="fas fa-check"></i> Test API Key
+      </button>
+      <div id="apiKeyResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Properties List -->
+    <div class="card">
+      <h3><i class="fas fa-list"></i> Available Properties</h3>
+      <button class="btn" onclick="loadProperties()">
+        <i class="fas fa-sync"></i> Load Properties
+      </button>
+      <div id="propertiesResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Data Sync -->
+    <div class="card">
+      <h3><i class="fas fa-download"></i> Data Sync</h3>
+      <div class="grid">
+        <div>
+          <div class="form-group">
+            <label for="syncSiteUrl">Site URL</label>
+            <input type="text" id="syncSiteUrl" placeholder="https://example.com/">
+          </div>
+          <div class="form-group">
+            <label for="syncDaysBack">Days Back</label>
+            <input type="number" id="syncDaysBack" value="30" min="1" max="365">
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label for="syncSearchType">Search Type</label>
+            <select id="syncSearchType">
+              <option value="web">Web</option>
+              <option value="image">Image</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="includeQueries" checked> Include Queries
+            </label>
+            <label>
+              <input type="checkbox" id="includePages" checked> Include Pages
+            </label>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-success" onclick="syncData()">
+        <i class="fas fa-sync"></i> Sync Data
+      </button>
+      <div id="syncResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Historical Backfill -->
+    <div class="card">
+      <h3><i class="fas fa-history"></i> Historical Backfill</h3>
+      <div class="grid">
+        <div>
+          <div class="form-group">
+            <label for="backfillSiteUrl">Site URL</label>
+            <input type="text" id="backfillSiteUrl" placeholder="https://example.com/">
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label for="backfillMonths">Months Back</label>
+            <input type="number" id="backfillMonths" value="6" min="1" max="12">
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-warning" onclick="backfillData()">
+        <i class="fas fa-history"></i> Backfill Historical Data
+      </button>
+      <div id="backfillResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Data Retrieval -->
+    <div class="card">
+      <h3><i class="fas fa-database"></i> Retrieve Stored Data</h3>
+      <div class="grid">
+        <div>
+          <div class="form-group">
+            <label for="retrieveSiteUrl">Site URL</label>
+            <input type="text" id="retrieveSiteUrl" placeholder="https://example.com/">
+          </div>
+          <div class="form-group">
+            <label for="retrieveDataType">Data Type</label>
+            <select id="retrieveDataType">
+              <option value="totals">Daily Totals</option>
+              <option value="queries">Query Data</option>
+              <option value="pages">Page Data</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label for="retrieveDays">Days</label>
+            <input type="number" id="retrieveDays" value="30" min="1" max="365">
+          </div>
+          <div class="form-group">
+            <label for="retrieveSearchType">Search Type</label>
+            <select id="retrieveSearchType">
+              <option value="web">Web</option>
+              <option value="image">Image</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-secondary" onclick="retrieveData()">
+        <i class="fas fa-search"></i> Retrieve Data
+      </button>
+      <div id="retrieveResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Sync Status -->
+    <div class="card">
+      <h3><i class="fas fa-info-circle"></i> Sync Status</h3>
+      <button class="btn btn-secondary" onclick="loadSyncStatus()">
+        <i class="fas fa-info"></i> Check Sync Status
+      </button>
+      <div id="syncStatusResult" class="result" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api/bing';
+    
+    async function apiCall(endpoint, options = {}) {
+      const url = `${API_BASE}${endpoint}`;
+      const response = await fetch(url, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers
+        },
+        ...options
+      });
+      
+      const data = await response.json().catch(() => ({}));
+      return { response, data };
+    }
+
+    function showResult(elementId, content, isError = false) {
+      const element = document.getElementById(elementId);
+      element.style.display = 'block';
+      element.innerHTML = content;
+      element.className = `result ${isError ? 'error' : 'success'}`;
+    }
+
+    function showLoading(button, show = true) {
+      const icon = button.querySelector('i');
+      if (show) {
+        icon.className = 'fas fa-spinner fa-spin';
+        button.disabled = true;
+      } else {
+        icon.className = icon.className.replace('fa-spinner fa-spin', 'fa-sync');
+        button.disabled = false;
+      }
+    }
+
+    async function testApiKey() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      if (!apiKey) {
+        showResult('apiKeyResult', '<div class="status error">Please enter an API key</div>', true);
+        return;
+      }
+
+      try {
+        const { response, data } = await apiCall(`/properties?apiKey=${encodeURIComponent(apiKey)}`);
+        
+        if (response.ok && data.success) {
+          const count = data.properties ? data.properties.length : 0;
+          showResult('apiKeyResult', `
+            <div class="status success">API Key is valid!</div>
+            <p>Found ${count} verified properties in your Bing Webmaster Tools account.</p>
+            <pre>${JSON.stringify(data.properties, null, 2)}</pre>
+          `);
+        } else {
+          showResult('apiKeyResult', `
+            <div class="status error">API Key test failed</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('apiKeyResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      }
+    }
+
+    async function loadProperties() {
+      const button = event.target;
+      showLoading(button);
+
+      try {
+        const { response, data } = await apiCall('/properties');
+        
+        if (response.ok && data.success) {
+          const properties = data.properties || [];
+          const siteList = properties.map(site => 
+            `<div class="site-item" onclick="selectSite('${site.siteUrl}')">${site.siteUrl}</div>`
+          ).join('');
+          
+          showResult('propertiesResult', `
+            <div class="status success">Found ${properties.length} properties</div>
+            <div class="site-list">${siteList}</div>
+          `);
+        } else {
+          showResult('propertiesResult', `
+            <div class="status error">Failed to load properties</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('propertiesResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    function selectSite(siteUrl) {
+      document.getElementById('syncSiteUrl').value = siteUrl;
+      document.getElementById('backfillSiteUrl').value = siteUrl;
+      document.getElementById('retrieveSiteUrl').value = siteUrl;
+    }
+
+    async function syncData() {
+      const button = event.target;
+      showLoading(button);
+
+      const siteUrl = document.getElementById('syncSiteUrl').value.trim();
+      const daysBack = parseInt(document.getElementById('syncDaysBack').value);
+      const searchType = document.getElementById('syncSearchType').value;
+      const includeQueries = document.getElementById('includeQueries').checked;
+      const includePages = document.getElementById('includePages').checked;
+
+      if (!siteUrl) {
+        showResult('syncResult', '<div class="status error">Please enter a site URL</div>', true);
+        showLoading(button, false);
+        return;
+      }
+
+      try {
+        const { response, data } = await apiCall('/sync', {
+          method: 'POST',
+          body: JSON.stringify({
+            siteUrl,
+            daysBack,
+            searchType,
+            includeQueries,
+            includePages
+          })
+        });
+        
+        if (response.ok && data.success) {
+          const results = data.results || {};
+          showResult('syncResult', `
+            <div class="status success">Sync completed successfully!</div>
+            <p><strong>Site:</strong> ${siteUrl}</p>
+            <p><strong>Days Back:</strong> ${daysBack}</p>
+            <p><strong>Search Type:</strong> ${searchType}</p>
+            <pre>${JSON.stringify(results, null, 2)}</pre>
+          `);
+        } else {
+          showResult('syncResult', `
+            <div class="status error">Sync failed</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('syncResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    async function backfillData() {
+      const button = event.target;
+      showLoading(button);
+
+      const siteUrl = document.getElementById('backfillSiteUrl').value.trim();
+      const monthsBack = parseInt(document.getElementById('backfillMonths').value);
+
+      if (!siteUrl) {
+        showResult('backfillResult', '<div class="status error">Please enter a site URL</div>', true);
+        showLoading(button, false);
+        return;
+      }
+
+      try {
+        const { response, data } = await apiCall('/backfill', {
+          method: 'POST',
+          body: JSON.stringify({
+            siteUrl,
+            monthsBack
+          })
+        });
+        
+        if (response.ok && data.success) {
+          const results = data.results || {};
+          showResult('backfillResult', `
+            <div class="status success">Backfill completed successfully!</div>
+            <p><strong>Site:</strong> ${siteUrl}</p>
+            <p><strong>Months Back:</strong> ${monthsBack}</p>
+            <pre>${JSON.stringify(results, null, 2)}</pre>
+          `);
+        } else {
+          showResult('backfillResult', `
+            <div class="status error">Backfill failed</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('backfillResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    async function retrieveData() {
+      const button = event.target;
+      showLoading(button);
+
+      const siteUrl = document.getElementById('retrieveSiteUrl').value.trim();
+      const dataType = document.getElementById('retrieveDataType').value;
+      const days = parseInt(document.getElementById('retrieveDays').value);
+      const searchType = document.getElementById('retrieveSearchType').value;
+
+      if (!siteUrl) {
+        showResult('retrieveResult', '<div class="status error">Please enter a site URL</div>', true);
+        showLoading(button, false);
+        return;
+      }
+
+      try {
+        const encodedSiteUrl = encodeURIComponent(siteUrl);
+        const { response, data } = await apiCall(`/data/${encodedSiteUrl}?dataType=${dataType}&days=${days}&searchType=${searchType}`);
+        
+        if (response.ok && data.success) {
+          const records = data.data || [];
+          showResult('retrieveResult', `
+            <div class="status success">Data retrieved successfully!</div>
+            <p><strong>Site:</strong> ${data.siteUrl}</p>
+            <p><strong>Data Type:</strong> ${dataType}</p>
+            <p><strong>Days:</strong> ${days}</p>
+            <p><strong>Records Found:</strong> ${records.length}</p>
+            <pre>${JSON.stringify(records, null, 2)}</pre>
+          `);
+        } else {
+          showResult('retrieveResult', `
+            <div class="status error">Data retrieval failed</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('retrieveResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    async function loadSyncStatus() {
+      const button = event.target;
+      showLoading(button);
+
+      try {
+        const { response, data } = await apiCall('/sync-status');
+        
+        if (response.ok && data.success) {
+          const statuses = data.statuses || [];
+          const statusHtml = statuses.map(status => `
+            <div style="border:1px solid #e9ecef; border-radius:4px; padding:.5rem; margin:.25rem 0;">
+              <strong>${status.siteUrl}</strong> - ${status.searchType} - ${status.dimension}<br>
+              <span class="status ${status.status === 'ok' ? 'success' : status.status === 'error' ? 'error' : 'warning'}">${status.status}</span>
+              ${status.message ? `<br><small>${status.message}</small>` : ''}
+              ${status.lastSyncedDate ? `<br><small>Last synced: ${new Date(status.lastSyncedDate).toLocaleString()}</small>` : ''}
+            </div>
+          `).join('');
+          
+          showResult('syncStatusResult', `
+            <div class="status info">Sync Status Overview</div>
+            <p><strong>Total Status Records:</strong> ${statuses.length}</p>
+            ${statusHtml}
+          `);
+        } else {
+          showResult('syncStatusResult', `
+            <div class="status error">Failed to load sync status</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('syncStatusResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    // Auto-fill common test URLs
+    document.addEventListener('DOMContentLoaded', function() {
+      const testUrls = [
+        'https://backloadingremovals.com.au/',
+        'https://movemycar.com.au/',
+        'https://again.com.au/'
+      ];
+      
+      // Add quick fill buttons
+      const syncCard = document.querySelector('.card:nth-child(3)');
+      const backfillCard = document.querySelector('.card:nth-child(4)');
+      const retrieveCard = document.querySelector('.card:nth-child(5)');
+      
+      testUrls.forEach(url => {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-secondary';
+        btn.style.fontSize = '0.8rem';
+        btn.innerHTML = `<i class="fas fa-link"></i> ${url.split('/')[2]}`;
+        btn.onclick = () => {
+          document.getElementById('syncSiteUrl').value = url;
+          document.getElementById('backfillSiteUrl').value = url;
+          document.getElementById('retrieveSiteUrl').value = url;
+        };
+        syncCard.querySelector('.form-group:first-child').appendChild(btn);
+      });
+    });
+  </script>
+</body>
+</html>
