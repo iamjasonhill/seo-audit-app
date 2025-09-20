@@ -781,7 +781,7 @@
                         return;
                     }
                     
-                    this.userInfo.textContent = `Welcome, ${data.user.username}`;
+                    this.userInfo.textContent = `Welcome, ${data.user.email || data.user.username}`;
                     // Toggle Admin link for admin role
                     try {
                         const adminLink = document.getElementById('adminLink');

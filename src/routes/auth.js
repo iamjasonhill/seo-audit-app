@@ -1,6 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
 const { login, logout, redirectIfAuthenticated, requireAuth, users } = require('../middleware/auth');
+const databaseService = require('../services/database');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -83,39 +84,27 @@ router.post('/logout', (req, res, next) => {
 });
 
 // GET /api/auth/status - Check authentication status
-router.get('/status', (req, res, next) => {
+router.get('/status', async (req, res, next) => {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
-    
-    logger.info('Auth status check:', {
-      hasAuthHeader: !!req.headers.authorization,
-      hasTokenCookie: !!req.cookies?.token,
-      tokenLength: token?.length || 0
-    });
-    
-    if (!token) {
-      return res.json({
-        authenticated: false
-      });
-    }
-    
+    if (!token) return res.json({ authenticated: false });
     const jwt = require('jsonwebtoken');
     const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'your-secret-key-change-in-production');
-    
+    const user = await databaseService.prisma.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) return res.json({ authenticated: false });
     res.json({
       authenticated: true,
       user: {
-        id: decoded.userId,
-        username: decoded.username,
-        role: decoded.role
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        name: user.name,
+        role: user.role
       }
     });
-    
   } catch (error) {
     logger.error('Auth status check error:', error);
-    res.json({
-      authenticated: false
-    });
+    res.json({ authenticated: false });
   }
 });
 

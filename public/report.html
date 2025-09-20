@@ -509,6 +509,14 @@
                 const d = await r.json();
                 const link = document.getElementById('adminLink');
                 if (link) link.style.display = (d?.authenticated && d?.user?.role === 'admin') ? '' : 'none';
+                // Show user email in nav
+                if (d?.authenticated && d?.user?.email) {
+                    const nav = document.querySelector('.nav .links');
+                    const span = document.createElement('span');
+                    span.style.color = '#6b7280';
+                    span.textContent = d.user.email;
+                    if (nav) nav.insertBefore(span, nav.firstChild);
+                }
             } catch (_) {}
         })();
     </script>

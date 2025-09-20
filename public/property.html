@@ -182,6 +182,13 @@
         const d = await r.json();
         const link = document.getElementById('adminLink');
         if (link) link.style.display = (d?.authenticated && d?.user?.role === 'admin') ? 'inline-flex' : 'none';
+        // Also show email on the right side header
+        const info = document.createElement('span');
+        info.className = 'muted';
+        info.style.marginLeft = '.5rem';
+        info.textContent = d?.user?.email || d?.user?.username || '';
+        const topRight = document.querySelector('.top > div:last-child');
+        if (topRight && info.textContent) topRight.insertBefore(info, topRight.firstChild);
       } catch(_) {}
       // Set GSC link
       const gscLink = document.getElementById('openGsc');
