@@ -13,6 +13,7 @@ const gscRateLimiter = require('./src/middleware/gscRateLimiter');
 const errorHandler = require('./src/middleware/errorHandler');
 const databaseService = require('./src/services/database');
 const gscScheduler = require('./src/services/gscScheduler');
+const bingScheduler = require('./src/services/bingScheduler');
 
 // Import routes
 const auditRoutes = require('./src/routes/audit');
@@ -129,7 +130,8 @@ app.listen(PORT, async () => {
     logger.info('Database connection established');
     if (process.env.SCHEDULER_ENABLED === 'true') {
       gscScheduler.start(60000);
-      logger.info('GSC Scheduler enabled');
+      bingScheduler.start(300000); // 5 minutes for Bing
+      logger.info('GSC and Bing Schedulers enabled');
     }
   } catch (error) {
     logger.error('Failed to connect to database:', error);

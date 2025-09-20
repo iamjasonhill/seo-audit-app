@@ -3,6 +3,7 @@ const { requireAuth } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const { BingApiClient } = require('../services/bingApi');
 const bingIngest = require('../services/bingIngest');
+const bingScheduler = require('../services/bingScheduler');
 const databaseService = require('../services/database');
 
 const router = express.Router();
@@ -201,6 +202,83 @@ router.get('/data/:siteUrl', requireAuth, async (req, res) => {
   } catch (err) {
     logger.error('Bing data fetch error:', err.message);
     res.status(err.status || 500).json({ error: 'BingDataError', message: err.message });
+  }
+});
+
+// POST /api/bing/scheduler/add - Add a property to the scheduler
+router.post('/scheduler/add', requireAuth, async (req, res) => {
+  try {
+    const { siteUrl, syncIntervalHours = 24, priorityOrder = 0 } = req.body;
+    const userId = req.user.id;
+    
+    if (!siteUrl) {
+      return res.status(400).json({ error: 'Site URL is required' });
+    }
+
+    await bingScheduler.addProperty(userId, siteUrl, { syncIntervalHours, priorityOrder });
+    
+    res.json({
+      success: true,
+      message: `Added ${siteUrl} to Bing scheduler`
+    });
+  } catch (error) {
+    logger.error('Bing scheduler add error:', error);
+    res.status(500).json({ 
+      error: 'Failed to add property to scheduler', 
+      message: error.message 
+    });
+  }
+});
+
+// DELETE /api/bing/scheduler/remove - Remove a property from the scheduler
+router.delete('/scheduler/remove', requireAuth, async (req, res) => {
+  try {
+    const { siteUrl } = req.body;
+    const userId = req.user.id;
+    
+    if (!siteUrl) {
+      return res.status(400).json({ error: 'Site URL is required' });
+    }
+
+    await bingScheduler.removeProperty(userId, siteUrl);
+    
+    res.json({
+      success: true,
+      message: `Removed ${siteUrl} from Bing scheduler`
+    });
+  } catch (error) {
+    logger.error('Bing scheduler remove error:', error);
+    res.status(500).json({ 
+      error: 'Failed to remove property from scheduler', 
+      message: error.message 
+    });
+  }
+});
+
+// GET /api/bing/scheduler/properties - Get scheduled properties for user
+router.get('/scheduler/properties', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    const properties = await databaseService.prisma.bingUserProperty.findMany({
+      where: { userId },
+      orderBy: [
+        { priorityOrder: 'asc' },
+        { nextSyncDueAt: 'asc' },
+        { lastFullSyncAt: 'asc' }
+      ]
+    });
+
+    res.json({
+      success: true,
+      properties
+    });
+  } catch (error) {
+    logger.error('Bing scheduler properties error:', error);
+    res.status(500).json({ 
+      error: 'Failed to get scheduled properties', 
+      message: error.message 
+    });
   }
 });
 

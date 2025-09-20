@@ -256,6 +256,31 @@ model BingUserSelection {
   @@map("bing_user_selection")
 }
 
+model BingUserProperty {
+  id                Int       @id @default(autoincrement())
+  userId            Int       @map("user_id")
+  siteUrl           String    @map("site_url")
+  enabled           Boolean   @default(true)
+  syncIntervalHours Int       @default(24) @map("sync_interval_hours")
+  priorityOrder     Int       @default(0) @map("priority_order")
+  lastFullSyncAt    DateTime? @map("last_full_sync_at")
+  nextSyncDueAt     DateTime? @map("next_sync_due_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@unique([userId, siteUrl])
+  @@index([enabled, nextSyncDueAt, priorityOrder, lastFullSyncAt])
+  @@map("bing_user_property")
+}
+
+model BingSyncLock {
+  id          String   @id
+  lockedUntil DateTime @map("locked_until")
+  lockedBy    String   @map("locked_by")
+
+  @@map("bing_sync_lock")
+}
+
 // Bing Webmaster Tools data tables (mirroring GSC structure)
 model BingSyncStatus {
   id              String   @id @default(cuid())
