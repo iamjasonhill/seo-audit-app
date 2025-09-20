@@ -267,6 +267,7 @@ model BingSyncStatus {
   status          String?  // ok, running, error
   message         String?
 
+  @@unique([siteUrl, searchType, dimension], map: "unique_bing_sync_status")
   @@index([siteUrl, searchType, dimension], map: "idx_bing_sync_status")
   @@map("bing_sync_status")
 }
