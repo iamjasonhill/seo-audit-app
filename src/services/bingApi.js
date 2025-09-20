@@ -28,12 +28,13 @@ class BingApiClient {
     this.requireKey();
     const url = `${this.baseUrl}/GetUserSites?apikey=${encodeURIComponent(this.apiKey)}`;
     const resp = await axios.get(url);
-    // Response format: { d: ["https://example.com/", ...] } or similar depending on account
+    // Response format: { d: [{"Url": "https://example.com/", ...}, ...] } 
     const data = resp.data || {};
     const list = Array.isArray(data.d) ? data.d : (Array.isArray(data) ? data : []);
     return list.map(site => {
       // Handle both string and object responses
-      const siteUrl = typeof site === 'string' ? site : (site?.siteUrl || site?.url || String(site));
+      // Bing API returns objects with 'Url' property (capital U)
+      const siteUrl = typeof site === 'string' ? site : (site?.Url || site?.siteUrl || site?.url || String(site));
       return { siteUrl };
     });
   }
