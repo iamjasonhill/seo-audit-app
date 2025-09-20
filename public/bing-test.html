@@ -196,15 +196,24 @@
     
     async function apiCall(endpoint, options = {}) {
       const url = `${API_BASE}${endpoint}`;
-      const response = await fetch(url, {
+      const fetchOptions = {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...options.headers
         },
         ...options
-      });
+      };
       
+      // If no method is specified and we have data, default to POST
+      if (!fetchOptions.method && (options.body || Object.keys(options).length > 0)) {
+        fetchOptions.method = 'POST';
+        if (!fetchOptions.body) {
+          fetchOptions.body = JSON.stringify(options);
+        }
+      }
+      
+      const response = await fetch(url, fetchOptions);
       const data = await response.json().catch(() => ({}));
       return { response, data };
     }
