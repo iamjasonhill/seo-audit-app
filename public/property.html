@@ -127,8 +127,6 @@
       el.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading Bing KPIs...</p>';
       
       try {
-        const days = Math.max(1, Math.round((new Date(range.end) - new Date(range.start)) / (24*60*60*1000)) + 1);
-        
         // Convert GSC property URL to actual URL for Bing data lookup
         const siteParam = qs('site');
         let bingSiteUrl = siteParam;
@@ -141,7 +139,7 @@
           }
         }
         
-        const url = `/api/bing/data/${encodeURIComponent(bingSiteUrl)}?searchType=${searchType}&days=${days}&dataType=totals`;
+        const url = `/api/bing/data/${encodeURIComponent(bingSiteUrl)}?searchType=${searchType}&startDate=${range.start}&endDate=${range.end}&dataType=totals`;
         const r = await fetch(url, { credentials:'include' }); 
         const d = await r.json();
         
@@ -759,7 +757,8 @@
       const buildUrl = () => {
         const params = new URLSearchParams();
         params.append('searchType', typeEl.value);
-        params.append('days', String(Math.ceil((new Date(endEl.value) - new Date(startEl.value)) / (24*60*60*1000)) + 1));
+        params.append('startDate', startEl.value);
+        params.append('endDate', endEl.value);
         params.append('dataType', tab);
         
         // Convert GSC property URL to actual URL for Bing data lookup

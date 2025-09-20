@@ -150,11 +150,20 @@ router.get('/sync-status', requireAuth, async (req, res) => {
 router.get('/data/:siteUrl', requireAuth, async (req, res) => {
   try {
     const { siteUrl } = req.params;
-    const { searchType = 'web', days = 30, dataType = 'totals' } = req.query;
+    const { searchType = 'web', days = 30, dataType = 'totals', startDate, endDate } = req.query;
     
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(endDate.getDate() - parseInt(days));
+    let start, end;
+    
+    if (startDate && endDate) {
+      // Use provided date range
+      start = new Date(startDate);
+      end = new Date(endDate);
+    } else {
+      // Fallback to days-based calculation
+      end = new Date();
+      start = new Date();
+      start.setDate(end.getDate() - parseInt(days));
+    }
 
     let data = [];
 
@@ -164,7 +173,7 @@ router.get('/data/:siteUrl', requireAuth, async (req, res) => {
           where: {
             siteUrl: decodeURIComponent(siteUrl),
             searchType,
-            date: { gte: startDate, lte: endDate }
+            date: { gte: start, lte: end }
           },
           orderBy: { date: 'desc' }
         });
@@ -175,7 +184,7 @@ router.get('/data/:siteUrl', requireAuth, async (req, res) => {
           where: {
             siteUrl: decodeURIComponent(siteUrl),
             searchType,
-            date: { gte: startDate, lte: endDate }
+            date: { gte: start, lte: end }
           },
           orderBy: [{ date: 'desc' }, { clicks: 'desc' }],
           take: 1000
@@ -187,7 +196,7 @@ router.get('/data/:siteUrl', requireAuth, async (req, res) => {
           where: {
             siteUrl: decodeURIComponent(siteUrl),
             searchType,
-            date: { gte: startDate, lte: endDate }
+            date: { gte: start, lte: end }
           },
           orderBy: [{ date: 'desc' }, { clicks: 'desc' }],
           take: 1000
