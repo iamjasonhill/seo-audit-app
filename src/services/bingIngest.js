@@ -98,8 +98,12 @@ class BingIngestService {
 
       logger.info(`Fetching Bing data from ${startDateStr} to ${endDateStr}`);
 
-      // Get daily totals from Bing API
-      const dailyData = await client.getDailyTotals(siteUrl, startDateStr, endDateStr, searchType);
+      // Get daily totals from Bing API with timeout
+      const apiPromise = client.getDailyTotals(siteUrl, startDateStr, endDateStr, searchType);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('API timeout after 2 minutes')), 2 * 60 * 1000);
+      });
+      const dailyData = await Promise.race([apiPromise, timeoutPromise]);
       
       logger.info(`Bing API response for ${siteUrl}:`, JSON.stringify(dailyData, null, 2));
       
@@ -217,8 +221,12 @@ class BingIngestService {
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
 
-      // Get query data from Bing API
-      const queryData = await client.getQueryStats(siteUrl, startDateStr, endDateStr, searchType, 1000);
+      // Get query data from Bing API with timeout
+      const apiPromise = client.getQueryStats(siteUrl, startDateStr, endDateStr, searchType, 1000);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('API timeout after 2 minutes')), 2 * 60 * 1000);
+      });
+      const queryData = await Promise.race([apiPromise, timeoutPromise]);
       
       if (!queryData || queryData.length === 0) {
         logger.warn(`No Bing query data found for ${siteUrl}`);
@@ -338,8 +346,12 @@ class BingIngestService {
       const startDateStr = startDate.toISOString().split('T')[0];
       const endDateStr = endDate.toISOString().split('T')[0];
 
-      // Get page data from Bing API
-      const pageData = await client.getPageStats(siteUrl, startDateStr, endDateStr, searchType, 1000);
+      // Get page data from Bing API with timeout
+      const apiPromise = client.getPageStats(siteUrl, startDateStr, endDateStr, searchType, 1000);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('API timeout after 2 minutes')), 2 * 60 * 1000);
+      });
+      const pageData = await Promise.race([apiPromise, timeoutPromise]);
       
       if (!pageData || pageData.length === 0) {
         logger.warn(`No Bing page data found for ${siteUrl}`);
@@ -490,14 +502,14 @@ class BingIngestService {
   }
 
   /**
-   * Backfill historical data for a site
+   * Backfill historical data for a site with improved error handling and rate limiting
    */
   async backfillSite(siteUrl, searchType = 'web', monthsBack = 6) {
     logger.info(`Starting Bing backfill for ${siteUrl} (${monthsBack} months)`);
 
     try {
-      // Process in weekly chunks to avoid timeouts
-      const chunkSizeDays = 7; // Process 1 week at a time
+      // Process in smaller chunks to avoid timeouts and rate limits
+      const chunkSizeDays = 3; // Process 3 days at a time (reduced from 7)
       const totalDays = monthsBack * 30;
       const totalChunks = Math.ceil(totalDays / chunkSizeDays);
       
@@ -513,7 +525,10 @@ class BingIngestService {
       const startDate = new Date();
       startDate.setMonth(startDate.getMonth() - monthsBack);
       
-      // Process each chunk
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 5;
+      
+      // Process each chunk with improved error handling
       for (let chunk = 0; chunk < totalChunks; chunk++) {
         const chunkStart = new Date(startDate);
         chunkStart.setDate(startDate.getDate() + (chunk * chunkSizeDays));
@@ -529,7 +544,8 @@ class BingIngestService {
         logger.info(`Bing backfill: Processing chunk ${chunk + 1}/${totalChunks} (${chunkStart.toISOString().split('T')[0]} to ${chunkEnd.toISOString().split('T')[0]})`);
         
         try {
-          const chunkResults = await this.syncSite(siteUrl, searchType, {
+          // Add timeout wrapper for each chunk
+          const chunkPromise = this.syncSite(siteUrl, searchType, {
             startDate: chunkStart,
             endDate: chunkEnd,
             includeQueries: true,
@@ -537,26 +553,54 @@ class BingIngestService {
             includeTotals: true
           });
           
+          // Set a timeout for each chunk (5 minutes)
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Chunk timeout after 5 minutes')), 5 * 60 * 1000);
+          });
+          
+          const chunkResults = await Promise.race([chunkPromise, timeoutPromise]);
+          
           // Accumulate results
-          if (chunkResults.totals) {
-            totalResults.totals.recordsProcessed += chunkResults.totals.recordsProcessed || 0;
+          if (chunkResults.results?.totals) {
+            totalResults.totals.recordsProcessed += chunkResults.results.totals.recordsProcessed || 0;
           }
-          if (chunkResults.queries) {
-            totalResults.queries.recordsProcessed += chunkResults.queries.recordsProcessed || 0;
+          if (chunkResults.results?.queries) {
+            totalResults.queries.recordsProcessed += chunkResults.results.queries.recordsProcessed || 0;
           }
-          if (chunkResults.pages) {
-            totalResults.pages.recordsProcessed += chunkResults.pages.recordsProcessed || 0;
+          if (chunkResults.results?.pages) {
+            totalResults.pages.recordsProcessed += chunkResults.results.pages.recordsProcessed || 0;
           }
           
-          logger.info(`Bing backfill: Chunk ${chunk + 1} completed - Totals: ${chunkResults.totals?.recordsProcessed || 0}, Queries: ${chunkResults.queries?.recordsProcessed || 0}, Pages: ${chunkResults.pages?.recordsProcessed || 0}`);
+          logger.info(`Bing backfill: Chunk ${chunk + 1} completed - Totals: ${chunkResults.results?.totals?.recordsProcessed || 0}, Queries: ${chunkResults.results?.queries?.recordsProcessed || 0}, Pages: ${chunkResults.results?.pages?.recordsProcessed || 0}`);
           
-          // Add a small delay between chunks to avoid overwhelming the API
+          // Reset consecutive error counter on success
+          consecutiveErrors = 0;
+          
+          // Add progressive delay between chunks to avoid overwhelming the API
+          const baseDelay = 2000; // 2 seconds base delay
+          const progressiveDelay = Math.min(chunk * 100, 5000); // Progressive delay up to 5 seconds
+          const totalDelay = baseDelay + progressiveDelay;
+          
           if (chunk < totalChunks - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+            logger.info(`Waiting ${totalDelay}ms before processing next chunk...`);
+            await new Promise(resolve => setTimeout(resolve, totalDelay));
           }
           
         } catch (chunkError) {
-          logger.error(`Bing backfill: Error in chunk ${chunk + 1}:`, chunkError.message);
+          consecutiveErrors++;
+          logger.error(`Bing backfill: Error in chunk ${chunk + 1} (${consecutiveErrors}/${maxConsecutiveErrors} consecutive errors):`, chunkError.message);
+          
+          // If we have too many consecutive errors, stop the backfill
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            logger.error(`Bing backfill: Too many consecutive errors (${consecutiveErrors}), stopping backfill for ${siteUrl}`);
+            break;
+          }
+          
+          // Add exponential backoff delay before retrying
+          const backoffDelay = Math.min(1000 * Math.pow(2, consecutiveErrors), 30000); // Max 30 seconds
+          logger.info(`Waiting ${backoffDelay}ms before continuing...`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
+          
           // Continue with next chunk instead of failing completely
           continue;
         }
