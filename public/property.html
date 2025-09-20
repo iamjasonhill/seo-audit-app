@@ -121,6 +121,100 @@
       </div>`;
     }
 
+    async function loadBingKpis(range, searchType) {
+      const el = document.getElementById('bingKpis');
+      const src = document.getElementById('bingSource');
+      el.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading Bing KPIs...</p>';
+      
+      try {
+        const days = Math.max(1, Math.round((new Date(range.end) - new Date(range.start)) / (24*60*60*1000)) + 1);
+        const url = `/api/bing/data/${encodeURIComponent(qs('site'))}?searchType=${searchType}&days=${days}&dataType=totals`;
+        const r = await fetch(url, { credentials:'include' }); 
+        const d = await r.json();
+        
+        if (!r.ok || !d.success) { 
+          el.innerHTML = `<p class="error">${d.message||'Failed to load Bing KPIs'}</p>`; 
+          return; 
+        }
+
+        // Source indicator
+        if (src) {
+          src.style.display = 'inline-flex';
+          src.textContent = 'Bing Webmaster Tools data';
+          src.className = 'source-pill source-db';
+        }
+
+        // Aggregate totals from daily data
+        const totals = d.data.reduce((acc, day) => ({
+          clicks: (acc.clicks || 0) + (day.clicks || 0),
+          impressions: (acc.impressions || 0) + (day.impressions || 0),
+          ctr: acc.ctr || 0, // Will calculate weighted average
+          position: acc.position || 0 // Will calculate weighted average
+        }), {});
+
+        // Calculate weighted averages for CTR and position
+        if (totals.impressions > 0) {
+          totals.ctr = totals.clicks / totals.impressions;
+        }
+        if (totals.clicks > 0) {
+          totals.position = d.data.reduce((sum, day) => sum + ((day.position || 0) * (day.clicks || 0)), 0) / totals.clicks;
+        }
+
+        // Compute comparison vs previous period
+        const startDate = new Date(range.start);
+        const endDate = new Date(range.end);
+        const prevEnd = new Date(startDate.getTime() - 24*60*60*1000);
+        const prevStart = new Date(prevEnd.getTime() - (days-1)*24*60*60*1000);
+        const iso = (d)=>d.toISOString().slice(0,10);
+        
+        let deltas = { clicks: 0, impressions: 0, ctr: 0, position: 0 };
+        try {
+          const url2 = `/api/bing/data/${encodeURIComponent(qs('site'))}?searchType=${searchType}&days=${days}&dataType=totals`;
+          const r2 = await fetch(url2, { credentials:'include' }); 
+          const d2 = await r2.json();
+          if (r2.ok && d2.success) {
+            const prevTotals = d2.data.reduce((acc, day) => ({
+              clicks: (acc.clicks || 0) + (day.clicks || 0),
+              impressions: (acc.impressions || 0) + (day.impressions || 0),
+              ctr: acc.ctr || 0,
+              position: acc.position || 0
+            }), {});
+            
+            if (prevTotals.impressions > 0) {
+              prevTotals.ctr = prevTotals.clicks / prevTotals.impressions;
+            }
+            if (prevTotals.clicks > 0) {
+              prevTotals.position = d2.data.reduce((sum, day) => sum + ((day.position || 0) * (day.clicks || 0)), 0) / prevTotals.clicks;
+            }
+            
+            deltas = {
+              clicks: (totals.clicks||0) - (prevTotals.clicks||0),
+              impressions: (totals.impressions||0) - (prevTotals.impressions||0),
+              ctr: (totals.ctr||0) - (prevTotals.ctr||0),
+              position: (totals.position||0) - (prevTotals.position||0)
+            };
+          }
+        } catch(_) {}
+
+        const deltaTag = (v, isInverse=false) => {
+          const sign = v>0?'+':'';
+          const val = isInverse ? (-v) : v; // for position, lower is better
+          const color = val>0?'#198754': (val<0?'#c33':'#666');
+          const fmt = (typeof v==='number' && Math.abs(v)<1 && !isInverse) ? pct(v) : (typeof v==='number'? (isInverse? val.toFixed(1): Math.round(val).toLocaleString()) : '');
+          return `<span style="color:${color};font-size:.85rem;margin-left:.35rem">${sign}${fmt}</span>`;
+        };
+
+        el.innerHTML = `<div style="display:flex;gap:1rem;flex-wrap:wrap">
+          <div class="card" style="padding:.75rem 1rem"><div class="muted">Clicks</div><div style="font-weight:700;font-size:1.2rem">${fmtNum(totals.clicks)}${deltaTag(deltas.clicks)}</div></div>
+          <div class="card" style="padding:.75rem 1rem"><div class="muted">Impressions</div><div style="font-weight:700;font-size:1.2rem">${fmtNum(totals.impressions)}${deltaTag(deltas.impressions)}</div></div>
+          <div class="card" style="padding:.75rem 1rem"><div class="muted">CTR</div><div style="font-weight:700;font-size:1.2rem">${pct(totals.ctr)}${deltaTag(deltas.ctr)}</div></div>
+          <div class="card" style="padding:.75rem 1rem"><div class="muted">Avg Pos</div><div style="font-weight:700;font-size:1.2rem">${(totals.position||0).toFixed(1)}${deltaTag(deltas.position, true)}</div></div>
+        </div>`;
+      } catch (error) {
+        el.innerHTML = `<p class="error">Failed to load Bing KPIs: ${error.message}</p>`;
+      }
+    }
+
     async function loadAudits(siteParam) {
       const el = document.getElementById('audits');
       el.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading audits...</p>';
@@ -240,6 +334,8 @@
         await loadAudits(site);
         // Load insights (current active tab)
         if (window.__insightsLoad) await window.__insightsLoad();
+        // Load Bing data
+        if (window.__bingInsightsLoad) await window.__bingInsightsLoad();
       };
       applyBtn.addEventListener('click', loadAll);
       // Quick search type buttons
@@ -254,6 +350,9 @@
       // Initialize URL Inspection and Sitemaps panels
       initPropUrlInspection();
       initPropSitemaps();
+      
+      // Initialize Bing controls
+      initBingControls();
 
       // Hide Data Sync card once initial 16 months coverage is complete
       async function hideSyncCardIfComplete() {
@@ -438,6 +537,50 @@
       </div>
       <div id="pSitemaps" style="margin-top:.5rem"></div>
     </div>
+
+    <!-- Bing Webmaster Tools Data -->
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fab fa-microsoft"></i> Bing Webmaster Tools</h3>
+      <div class="controls">
+        <div><label class="muted">Start</label> <input type="date" id="bingStart"></div>
+        <div><label class="muted">End</label> <input type="date" id="bingEnd"></div>
+        <div>
+          <label class="muted">Type</label>
+          <select id="bingSearchType"><option value="web" selected>Web</option></select>
+        </div>
+        <button id="bingApply" class="audit-btn" style="background:#0078d4"><i class="fas fa-check"></i> Apply</button>
+        <span id="bingSource" class="source-pill" style="margin-left:.5rem; display:none"></span>
+      </div>
+      <div id="bingKpis"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fab fa-microsoft"></i> Bing Insights</h3>
+      <div class="controls">
+        <div>
+          <label class="muted">Rows</label>
+          <select id="bingRows" style="padding:.4rem;border:1px solid #e1e5e9;border-radius:6px">
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+          </select>
+        </div>
+        <button id="bingPages" class="audit-btn" style="background:#0078d4"><i class="fas fa-file-alt"></i> Pages</button>
+        <button id="bingQueries" class="audit-btn" style="background:#6c757d"><i class="fas fa-search"></i> Queries</button>
+      </div>
+      <div id="bingSourceInfo" class="muted" style="margin:.25rem 0 .25rem 0"></div>
+      <div id="bingInsights"></div>
+      <div id="bingPager" style="margin-top:.5rem; display:flex; gap:.5rem; align-items:center"></div>
+    </div>
+
+    <div class="card" id="bingSyncCard">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fab fa-microsoft"></i> Bing Data Sync</h3>
+      <div class="controls">
+        <button id="bingBackfillBtn" class="audit-btn" style="background:#0078d4"><i class="fas fa-cloud-download-alt"></i> Backfill last 24 months</button>
+        <span id="bingBackfillMsg" class="muted"></span>
+      </div>
+      <div id="bingSyncStatus" class="muted">No sync activity yet.</div>
+    </div>
   </div>
 
   <script>
@@ -574,6 +717,161 @@
       // default
       setActive('pages'); load();
     })();
+
+    // Bing Webmaster Tools logic for property page
+    (function(){
+      const byId = (id) => document.getElementById(id);
+      const startEl = byId('bingStart');
+      const endEl = byId('bingEnd');
+      const typeEl = byId('bingSearchType');
+      const rowsEl = byId('bingRows');
+      const out = byId('bingInsights');
+      const ps = byId('bingSourceInfo');
+      const pager = byId('bingPager');
+      const btns = {
+        pages: byId('bingPages'),
+        queries: byId('bingQueries')
+      };
+      let endpoint = '/api/bing/data';
+      let tab = 'pages';
+      let rowLimit = 50;
+      let startRow = 0;
+
+      const setActive = (key) => {
+        Object.entries(btns).forEach(([k, b]) => { 
+          if (b) b.style.background = (k===key? '#0078d4' : '#6c757d'); 
+        });
+      };
+
+      const buildUrl = () => {
+        const params = new URLSearchParams();
+        params.append('searchType', typeEl.value);
+        params.append('days', String(Math.ceil((new Date(endEl.value) - new Date(startEl.value)) / (24*60*60*1000)) + 1));
+        params.append('dataType', tab);
+        return `${endpoint}/${encodeURIComponent(qs('site'))}?${params.toString()}`;
+      };
+
+      const render = (rows) => {
+        if (!rows || rows.length === 0) { 
+          out.innerHTML = '<p class="muted">No Bing data for selected range.</p>'; 
+          pager.innerHTML=''; 
+          return; 
+        }
+        const label = tab==='pages'?'Page':'Query';
+        const firstVal = (r)=> tab==='pages'?r.page: r.query;
+        out.innerHTML = `<table class="history-table"><thead><tr><th>${label}</th><th>Clicks</th><th>Impr</th><th>CTR</th><th>Pos</th></tr></thead><tbody>
+          ${rows.map(r=>`<tr><td>${firstVal(r)||''}</td><td>${(r.clicks||0).toLocaleString()}</td><td>${(r.impressions||0).toLocaleString()}</td><td>${(((r.ctr||0)*100)||0).toFixed(2)}%</td><td>${((r.position||0)||0).toFixed(1)}</td></tr>`).join('')}
+        </tbody></table>`;
+        pager.innerHTML = `
+          <button id="bingPgPrev" class="audit-btn" style="width:auto;background:#6c757d" ${startRow===0?'disabled':''}><i class="fas fa-chevron-left"></i> Prev</button>
+          <span class="muted">Rows ${startRow+1}–${startRow+rows.length}</span>
+          <button id="bingPgNext" class="audit-btn" style="width:auto"><i class="fas fa-chevron-right"></i> Next</button>`;
+        const prev = byId('bingPgPrev'); const next = byId('bingPgNext');
+        if (prev) prev.onclick = ()=>{ if (startRow>0){ startRow=Math.max(0,startRow-rowLimit); load(); }};
+        if (next) next.onclick = ()=>{ startRow += rowLimit; load(); };
+      };
+
+      async function load(){
+        out.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading…</p>';
+        try {
+          const r = await fetch(buildUrl(), { credentials:'include' });
+          const d = await r.json();
+          if (!r.ok || !d.success) throw new Error(d.message||'Failed to load Bing data');
+          if (ps) ps.textContent = 'Source: Bing Webmaster Tools data';
+          render(d.data);
+        } catch(e){ out.innerHTML = `<p class="error">${e.message}</p>`; pager.innerHTML=''; }
+      }
+
+      // public hook so the top Apply button can reload current tab
+      window.__bingInsightsLoad = load;
+
+      if (rowsEl) rowsEl.onchange = ()=>{ rowLimit=parseInt(rowsEl.value||'50',10); startRow=0; load(); };
+      if (btns.pages) btns.pages.onclick = ()=>{ tab='pages'; setActive('pages'); startRow=0; load(); };
+      if (btns.queries) btns.queries.onclick = ()=>{ tab='queries'; setActive('queries'); startRow=0; load(); };
+
+      // default
+      setActive('pages'); load();
+    })();
+
+    // Initialize Bing controls
+    function initBingControls() {
+      // Set default date range for Bing (same as GSC)
+      const range = getDefaultRange();
+      const bingStartEl = document.getElementById('bingStart');
+      const bingEndEl = document.getElementById('bingEnd');
+      const bingTypeEl = document.getElementById('bingSearchType');
+      const bingApplyBtn = document.getElementById('bingApply');
+      
+      if (bingStartEl) bingStartEl.value = range.start;
+      if (bingEndEl) bingEndEl.value = range.end;
+      
+      // Bing Apply button
+      if (bingApplyBtn) {
+        bingApplyBtn.addEventListener('click', async () => {
+          const bingRange = { start: bingStartEl.value, end: bingEndEl.value };
+          await loadBingKpis(bingRange, bingTypeEl.value);
+          if (window.__bingInsightsLoad) await window.__bingInsightsLoad();
+        });
+      }
+      
+      // Bing backfill and sync status
+      const bingBackfillBtn = document.getElementById('bingBackfillBtn');
+      const bingBackfillMsg = document.getElementById('bingBackfillMsg');
+      const bingSyncStatus = document.getElementById('bingSyncStatus');
+      
+      async function loadBingSync() {
+        try {
+          const r = await fetch(`/api/bing/sync-status?siteUrl=${encodeURIComponent(qs('site'))}`, { credentials:'include' });
+          const d = await r.json();
+          if (!r.ok || !d.success) throw new Error(d.message||'Failed to load Bing sync status');
+          const rows = d.status || [];
+          if (!rows.length) { bingSyncStatus.textContent = 'No Bing sync activity yet.'; return; }
+          const fmt = (s) => s ? new Date(s).toLocaleString(undefined,{ dateStyle:'short', timeStyle:'short' }) : '—';
+          const html = `<table class="history-table"><thead><tr><th>Dimension</th><th>Type</th><th>Last Synced</th><th>Status</th><th>Updated</th></tr></thead><tbody>
+            ${rows.map(r=>`<tr><td>${r.dimension}</td><td>${r.searchType}</td><td>${fmt(r.lastSyncedDate)}</td><td>${r.status||'—'}</td><td>${fmt(r.lastRunAt)}</td></tr>`).join('')}
+          </tbody></table>`;
+          bingSyncStatus.innerHTML = html;
+        } catch(e) {
+          bingSyncStatus.textContent = e.message;
+        }
+      }
+      
+      if (bingBackfillBtn) {
+        bingBackfillBtn.addEventListener('click', async () => {
+          bingBackfillMsg.style.color = '#666';
+          bingBackfillMsg.textContent = 'Starting Bing backfill… this may take a while.';
+          bingBackfillBtn.disabled = true;
+          const orig = bingBackfillBtn.innerHTML; 
+          bingBackfillBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Backfilling…';
+          try {
+            const resp = await fetch('/api/bing/backfill', { 
+              method:'POST', 
+              headers:{'Content-Type':'application/json'}, 
+              credentials:'include', 
+              body: JSON.stringify({ 
+                siteUrl: qs('site'),
+                searchType: 'web',
+                months: 24
+              }) 
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data.success) throw new Error(data.message||'Bing backfill failed');
+            bingBackfillMsg.style.color = '#155724';
+            bingBackfillMsg.textContent = 'Bing backfill completed.';
+          } catch(e) {
+            bingBackfillMsg.style.color = '#c33';
+            bingBackfillMsg.textContent = e.message;
+          } finally {
+            bingBackfillBtn.disabled = false; 
+            bingBackfillBtn.innerHTML = orig; 
+            loadBingSync();
+          }
+        });
+      }
+      
+      // Initial Bing sync status load
+      loadBingSync();
+    }
 
     // Property URL Inspection panel
     function initPropUrlInspection(){
