@@ -1,16 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
-
-// Simple in-memory user store (in production, use a database)
-const users = [
-  {
-    id: 1,
-    username: 'admin',
-    password: '$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // password: 'password'
-    role: 'admin'
-  }
-];
+const databaseService = require('../services/database');
 
 // Middleware to check if user is authenticated
 const requireAuth = (req, res, next) => {
@@ -27,13 +18,9 @@ const requireAuth = (req, res, next) => {
   
   try {
     const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'your-secret-key-change-in-production');
-    const user = users.find(u => u.id === decoded.userId);
-    
-    if (!user) {
-      throw new Error('User not found');
-    }
-    
-    req.user = user;
+    const user = await databaseService.prisma.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) throw new Error('User not found');
+    req.user = { id: user.id, username: user.name || user.email };
     next();
   } catch (error) {
     logger.error('JWT verification failed:', error.message);
@@ -47,14 +34,13 @@ const requireAuth = (req, res, next) => {
 };
 
 // Middleware to check if user is already authenticated (for login page)
-const redirectIfAuthenticated = (req, res, next) => {
+const redirectIfAuthenticated = async (req, res, next) => {
   const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
   
   if (token) {
     try {
       const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'your-secret-key-change-in-production');
-      const user = users.find(u => u.id === decoded.userId);
-      
+      const user = await databaseService.prisma.user.findUnique({ where: { id: decoded.userId } });
       if (user) {
         return res.redirect('/dashboard');
       }
@@ -110,6 +96,5 @@ module.exports = {
   redirectIfAuthenticated,
   login,
   logout,
-  users
 };
 

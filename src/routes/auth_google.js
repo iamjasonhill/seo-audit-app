@@ -2,6 +2,7 @@ const express = require('express');
 const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
+const databaseService = require('../services/database');
 
 const router = express.Router();
 
@@ -45,17 +46,24 @@ router.get('/callback', async (req, res) => {
     const email = info?.data?.email || '';
     const verified = !!info?.data?.verified_email;
 
-    const allowed = (process.env.ADMIN_GOOGLE_EMAIL || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-    if (!verified || !allowed.includes(email.toLowerCase())) {
-      logger.warn('Google login rejected for email:', email);
-      return res.status(401).json({ error: 'Unauthorized', message: 'Email not permitted' });
+    if (!verified || !email) {
+      return res.status(401).json({ error: 'Unauthorized', message: 'Google account not verified' });
     }
 
-    // Mint JWT for the existing admin user (id:1)
+    // Upsert user by email
+    const name = info?.data?.name || null;
+    const picture = info?.data?.picture || null;
+    const user = await databaseService.prisma.user.upsert({
+      where: { email },
+      update: { name, picture },
+      create: { email, name, picture },
+    });
+
+    // Mint JWT for this userId
     const token = jwt.sign(
-      { userId: 1, username: 'admin', role: 'admin' },
+      { userId: user.id, username: user.name || user.email },
       process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-      { expiresIn: '24h' }
+      { expiresIn: '30d' }
     );
 
     res.cookie('token', token, {
