@@ -69,7 +69,7 @@ router.post('/backfill', requireAuth, async (req, res) => {
 // POST /api/bing/backfill-all - Bulk backfill all available sites
 router.post('/backfill-all', requireAuth, async (req, res) => {
   try {
-    const { searchType = 'web', monthsBack = 24 } = req.body; // Default to 2 years of data
+    const { searchType = 'web', monthsBack = 24, staggerDelay = 30000 } = req.body; // Default to 2 years of data, 30s delay between sites
     
     logger.info(`Starting bulk Bing backfill for all sites (${monthsBack} months)`);
     
@@ -86,16 +86,23 @@ router.post('/backfill-all', requireAuth, async (req, res) => {
 
     const results = [];
     
-    // Process each site
-    for (const site of sites) {
+    // Process each site with stagger delay to avoid overwhelming the API
+    for (let i = 0; i < sites.length; i++) {
+      const site = sites[i];
       try {
-        logger.info(`Backfilling data for ${site.siteUrl}`);
+        logger.info(`Backfilling data for ${site.siteUrl} (${i + 1}/${sites.length})`);
         const result = await bingIngest.backfillSite(site.siteUrl, searchType, monthsBack);
         results.push({
           siteUrl: site.siteUrl,
           success: true,
           result
         });
+        
+        // Add delay between sites (except for the last one)
+        if (i < sites.length - 1) {
+          logger.info(`Waiting ${staggerDelay}ms before processing next site...`);
+          await new Promise(resolve => setTimeout(resolve, staggerDelay));
+        }
       } catch (error) {
         logger.error(`Backfill failed for ${site.siteUrl}:`, error);
         results.push({
@@ -123,6 +130,119 @@ router.post('/backfill-all', requireAuth, async (req, res) => {
     logger.error('Bulk Bing backfill error:', error);
     res.status(500).json({ 
       error: 'Bulk backfill failed', 
+      message: error.message 
+    });
+  }
+});
+
+// POST /api/bing/complete-setup - Complete setup: backfill all sites and add to scheduler
+router.post('/complete-setup', requireAuth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    
+    const { monthsBack = 24, staggerDelay = 30000, syncIntervalHours = 24 } = req.body;
+    
+    logger.info(`Starting complete Bing setup: backfill + scheduler setup`);
+    
+    // Step 1: Get all available sites from Bing
+    const apiKey = process.env.BING_API_KEY || '';
+    const bingApi = new BingApiClient(apiKey);
+    const sites = await bingApi.getUserSites();
+    
+    if (!sites || sites.length === 0) {
+      return res.status(400).json({ 
+        error: 'No sites found in Bing Webmaster Tools' 
+      });
+    }
+
+    const results = {
+      backfill: [],
+      scheduler: []
+    };
+    
+    // Step 2: Backfill all sites
+    logger.info(`Step 1: Backfilling ${sites.length} sites with ${monthsBack} months of data`);
+    for (let i = 0; i < sites.length; i++) {
+      const site = sites[i];
+      try {
+        logger.info(`Backfilling data for ${site.siteUrl} (${i + 1}/${sites.length})`);
+        const result = await bingIngest.backfillSite(site.siteUrl, 'web', monthsBack);
+        results.backfill.push({
+          siteUrl: site.siteUrl,
+          success: true,
+          result
+        });
+        
+        // Add delay between sites (except for the last one)
+        if (i < sites.length - 1) {
+          logger.info(`Waiting ${staggerDelay}ms before processing next site...`);
+          await new Promise(resolve => setTimeout(resolve, staggerDelay));
+        }
+      } catch (error) {
+        logger.error(`Backfill failed for ${site.siteUrl}:`, error);
+        results.backfill.push({
+          siteUrl: site.siteUrl,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+    
+    // Step 3: Add all sites to scheduler with staggered start times
+    logger.info(`Step 2: Adding ${sites.length} sites to scheduler`);
+    const staggerMinutes = 5; // 5 minutes between each site's first sync
+    for (let i = 0; i < sites.length; i++) {
+      const site = sites[i];
+      try {
+        const priorityOrder = i;
+        const nextSyncDueAt = new Date(Date.now() + (i * staggerMinutes * 60 * 1000));
+        
+        await bingScheduler.addProperty(req.user.id, site.siteUrl, syncIntervalHours, priorityOrder, nextSyncDueAt);
+        results.scheduler.push({
+          siteUrl: site.siteUrl,
+          success: true,
+          priorityOrder,
+          nextSyncDueAt: nextSyncDueAt.toISOString()
+        });
+        
+        logger.info(`Added ${site.siteUrl} to scheduler (priority ${priorityOrder}, next sync: ${nextSyncDueAt.toISOString()})`);
+      } catch (error) {
+        logger.error(`Failed to add ${site.siteUrl} to scheduler:`, error);
+        results.scheduler.push({
+          siteUrl: site.siteUrl,
+          success: false,
+          error: error.message
+        });
+      }
+    }
+    
+    const backfillSuccessCount = results.backfill.filter(r => r.success).length;
+    const backfillFailureCount = results.backfill.filter(r => !r.success).length;
+    const schedulerSuccessCount = results.scheduler.filter(r => r.success).length;
+    const schedulerFailureCount = results.scheduler.filter(r => !r.success).length;
+    
+    res.json({
+      success: true,
+      message: `Complete setup finished: Backfill ${backfillSuccessCount}/${sites.length} successful, Scheduler ${schedulerSuccessCount}/${sites.length} successful`,
+      summary: {
+        totalSites: sites.length,
+        backfill: {
+          successful: backfillSuccessCount,
+          failed: backfillFailureCount
+        },
+        scheduler: {
+          successful: schedulerSuccessCount,
+          failed: schedulerFailureCount
+        }
+      },
+      results
+    });
+  } catch (error) {
+    logger.error('Complete Bing setup error:', error);
+    res.status(500).json({ 
+      error: 'Complete setup failed', 
       message: error.message 
     });
   }

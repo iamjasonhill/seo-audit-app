@@ -135,14 +135,61 @@
     <div class="card">
       <h3><i class="fas fa-globe"></i> Bulk Backfill All Sites</h3>
       <p>This will backfill historical data for ALL sites in your Bing Webmaster Tools account.</p>
-      <div class="form-group">
-        <label for="bulkBackfillMonths">Months to backfill (default: 24)</label>
-        <input type="number" id="bulkBackfillMonths" value="24" min="1" max="36">
+      <div class="grid">
+        <div>
+          <div class="form-group">
+            <label for="bulkBackfillMonths">Months to backfill (default: 24)</label>
+            <input type="number" id="bulkBackfillMonths" value="24" min="1" max="36">
+          </div>
+          <div class="form-group">
+            <label for="bulkStaggerDelay">Stagger delay (ms)</label>
+            <input type="number" id="bulkStaggerDelay" value="30000" min="1000" max="300000">
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label for="bulkSearchType">Search Type</label>
+            <select id="bulkSearchType">
+              <option value="web">Web</option>
+              <option value="image">Image</option>
+            </select>
+          </div>
+        </div>
       </div>
       <button class="btn btn-danger" id="bulkBackfillBtn">
         <i class="fas fa-globe"></i> Backfill ALL Sites
       </button>
       <div id="bulkBackfillResult" class="result" style="display:none;"></div>
+    </div>
+
+    <!-- Complete Setup (Admin Only) -->
+    <div class="card">
+      <h3><i class="fas fa-rocket"></i> Complete Setup (Admin Only)</h3>
+      <div class="alert alert-info">
+        <strong>Complete Setup:</strong> This will backfill all sites with 24 months of data AND add them to the scheduler with staggered start times. This is the recommended way to set up Bing integration for all domains.
+      </div>
+      <div class="grid">
+        <div>
+          <div class="form-group">
+            <label for="completeMonths">Months to Backfill</label>
+            <input type="number" id="completeMonths" value="24" min="1" max="24">
+          </div>
+          <div class="form-group">
+            <label for="completeStaggerDelay">Stagger Delay (ms)</label>
+            <input type="number" id="completeStaggerDelay" value="30000" min="1000" max="300000">
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label for="completeSyncInterval">Sync Interval (hours)</label>
+            <input type="number" id="completeSyncInterval" value="24" min="1" max="168">
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="completeSetupBtn">
+        <i class="fas fa-rocket"></i> Complete Setup (Backfill + Scheduler)
+      </button>
+      <div id="completeSetupResult" class="result" style="display:none;"></div>
     </div>
 
     <!-- Scheduler Management -->
@@ -480,10 +527,14 @@
       showLoading(button);
 
       const monthsBack = parseInt(document.getElementById('bulkBackfillMonths').value);
+      const staggerDelay = parseInt(document.getElementById('bulkStaggerDelay').value);
+      const searchType = document.getElementById('bulkSearchType').value;
 
       try {
         const { response, data } = await apiCall('/backfill-all', {
-          monthsBack: monthsBack
+          monthsBack: monthsBack,
+          staggerDelay: staggerDelay,
+          searchType: searchType
         });
         
         if (response.ok && data.success) {
@@ -494,6 +545,8 @@
             <p><strong>Successful:</strong> ${summary.successful}</p>
             <p><strong>Failed:</strong> ${summary.failed}</p>
             <p><strong>Months Back:</strong> ${monthsBack}</p>
+            <p><strong>Search Type:</strong> ${searchType}</p>
+            <p><strong>Stagger Delay:</strong> ${staggerDelay}ms</p>
             <details>
               <summary>Detailed Results</summary>
               <pre>${JSON.stringify(data.results, null, 2)}</pre>
@@ -508,6 +561,52 @@
       } catch (error) {
         showResult('bulkBackfillResult', `
           <div class="status error">Bulk backfill failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    async function completeSetup() {
+      const button = document.getElementById('completeSetupBtn');
+      showLoading(button);
+
+      const monthsBack = parseInt(document.getElementById('completeMonths').value);
+      const staggerDelay = parseInt(document.getElementById('completeStaggerDelay').value);
+      const syncIntervalHours = parseInt(document.getElementById('completeSyncInterval').value);
+
+      try {
+        const { response, data } = await apiCall('/complete-setup', {
+          monthsBack: monthsBack,
+          staggerDelay: staggerDelay,
+          syncIntervalHours: syncIntervalHours
+        });
+        
+        if (response.ok && data.success) {
+          const summary = data.summary || {};
+          showResult('completeSetupResult', `
+            <div class="status success">Complete setup finished!</div>
+            <p><strong>Total Sites:</strong> ${summary.totalSites}</p>
+            <p><strong>Backfill:</strong> ${summary.backfill.successful}/${summary.totalSites} successful</p>
+            <p><strong>Scheduler:</strong> ${summary.scheduler.successful}/${summary.totalSites} successful</p>
+            <p><strong>Months Back:</strong> ${monthsBack}</p>
+            <p><strong>Sync Interval:</strong> ${syncIntervalHours} hours</p>
+            <p><strong>Stagger Delay:</strong> ${staggerDelay}ms</p>
+            <details>
+              <summary>Detailed Results</summary>
+              <pre>${JSON.stringify(data.results, null, 2)}</pre>
+            </details>
+          `);
+        } else {
+          showResult('completeSetupResult', `
+            <div class="status error">Complete setup failed</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('completeSetupResult', `
+          <div class="status error">Complete setup failed</div>
           <p>${error.message}</p>
         `, true);
       } finally {
@@ -877,6 +976,7 @@
       document.getElementById('syncDataBtn').addEventListener('click', syncData);
       document.getElementById('backfillDataBtn').addEventListener('click', backfillData);
       document.getElementById('bulkBackfillBtn').addEventListener('click', bulkBackfillAll);
+      document.getElementById('completeSetupBtn').addEventListener('click', completeSetup);
       document.getElementById('setupTablesBtn').addEventListener('click', setupSchedulerTables);
       document.getElementById('loadAvailablePropertiesBtn').addEventListener('click', loadAvailableProperties);
       document.getElementById('addAllToSchedulerBtn').addEventListener('click', addAllToScheduler);
