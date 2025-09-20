@@ -48,6 +48,21 @@ router.patch('/users/:id', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
+// List domains per user (user -> registered properties)
+router.get('/user-properties', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const users = await databaseService.prisma.user.findMany({ orderBy: { id: 'asc' } });
+    const props = await databaseService.prisma.gscUserProperty.findMany({ orderBy: [{ userId: 'asc' }, { priorityOrder: 'asc' }] });
+    const map = users.map(u => ({
+      user: { id: u.id, email: u.email, username: u.username, role: u.role, status: u.status },
+      properties: props.filter(p => p.userId === u.id).map(p => ({ siteUrl: p.siteUrl, enabled: p.enabled, priorityOrder: p.priorityOrder, lastFullSyncAt: p.lastFullSyncAt, nextSyncDueAt: p.nextSyncDueAt }))
+    }));
+    res.json({ success: true, items: map });
+  } catch (e) {
+    res.status(500).json({ error: 'ListError', message: e.message });
+  }
+});
+
 module.exports = router;
 
 

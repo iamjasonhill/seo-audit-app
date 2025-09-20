@@ -38,6 +38,11 @@
       </div>
       <div id="users"></div>
     </div>
+
+    <div class="card">
+      <h3 style="margin:.25rem 0 1rem 0"><i class="fas fa-sitemap"></i> User → Domains</h3>
+      <div id="userProps"></div>
+    </div>
   </div>
 
   <script>
@@ -78,6 +83,34 @@
         });
       }catch(e){ show(e.message,false); }
     }
+    async function loadUserProps(){
+      const host = document.getElementById('userProps');
+      host.innerHTML = '<p class="muted"><i class="fas fa-spinner fa-spin"></i> Loading…</p>';
+      try {
+        const d = await api('/api/admin/user-properties');
+        const items = d.items||[];
+        if (!items.length) { host.innerHTML = '<p class="muted">No user properties registered.</p>'; return; }
+        const rows = items.map(x=>{
+          const list = (x.properties||[]).map(p=>`<li>${p.siteUrl} ${p.enabled?'' : '<span class=\'muted\'>(disabled)</span>'}</li>`).join('');
+          return `<tr>
+            <td>${x.user.id}</td>
+            <td>${x.user.email}</td>
+            <td>${x.user.username||''}</td>
+            <td>${x.user.role}</td>
+            <td>${x.user.status}</td>
+            <td>${(x.properties||[]).length}</td>
+            <td><ul style="margin-left:1rem">${list||'<li class=\'muted\'>—</li>'}</ul></td>
+          </tr>`;
+        }).join('');
+        host.innerHTML = `
+          <table class="history-table">
+            <thead><tr><th>ID</th><th>Email</th><th>Username</th><th>Role</th><th>Status</th><th># Domains</th><th>Domains</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      } catch(e) {
+        host.innerHTML = `<p class="error">${e.message}</p>`;
+      }
+    }
     document.getElementById('refreshBtn').onclick=load;
     document.getElementById('addBtn').onclick=async()=>{
       const email = document.getElementById('email').value.trim();
@@ -86,7 +119,7 @@
       try{ await api('/api/admin/users',{ method:'POST', body: JSON.stringify({ email, role }) }); show('User added/activated',true); await load(); }
       catch(e){ show(e.message,false); }
     };
-    load();
+    (async ()=>{ await load(); await loadUserProps(); })();
   </script>
 </body>
 </html>
