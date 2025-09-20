@@ -20,7 +20,13 @@ const requireAuth = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.SESSION_SECRET || 'your-secret-key-change-in-production');
     const user = await databaseService.prisma.user.findUnique({ where: { id: decoded.userId } });
     if (!user) throw new Error('User not found');
-    req.user = { id: user.id, username: user.name || user.email };
+    req.user = { 
+      id: user.id, 
+      username: user.name || user.email,
+      email: user.email,
+      role: user.role,
+      status: user.status
+    };
     next();
   } catch (error) {
     logger.error('JWT verification failed:', error.message);
