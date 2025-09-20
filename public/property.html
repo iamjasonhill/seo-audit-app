@@ -747,7 +747,7 @@
         queries: byId('bingQueries')
       };
       let endpoint = '/api/bing/data';
-      let tab = 'pages';
+      let tab = 'queries';
       let rowLimit = 50;
       let startRow = 0;
 
@@ -824,7 +824,7 @@
       if (btns.queries) btns.queries.onclick = ()=>{ tab='queries'; setActive('queries'); startRow=0; load(); };
 
       // default
-      setActive('pages'); load();
+      setActive('queries'); load();
     })();
 
     // Initialize Bing controls
