@@ -55,29 +55,12 @@ const redirectIfAuthenticated = async (req, res, next) => {
 // Login function
 const login = async (username, password) => {
   try {
-    const user = users.find(u => u.username === username);
-    if (!user) {
-      throw new Error('Invalid credentials');
-    }
-    
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      throw new Error('Invalid credentials');
-    }
-    
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role },
-      process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-      { expiresIn: '24h' }
-    );
-    
-    return {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-      token
-    };
+    const user = await databaseService.prisma.user.findFirst({ where: { username } });
+    if (!user || user.status !== 'active' || !user.passwordHash) throw new Error('Invalid credentials');
+    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    if (!isValidPassword) throw new Error('Invalid credentials');
+    const token = jwt.sign({ userId: user.id, username: user.username || user.email, role: user.role }, process.env.SESSION_SECRET || 'your-secret-key-change-in-production', { expiresIn: '30d' });
+    return { id: user.id, username: user.username || user.email, role: user.role, token };
   } catch (error) {
     logger.error('Login error:', error);
     throw error;
