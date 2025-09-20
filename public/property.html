@@ -174,13 +174,14 @@
         // Compute comparison vs previous period
         const startDate = new Date(range.start);
         const endDate = new Date(range.end);
+        const days = Math.max(1, Math.round((endDate - startDate) / (24*60*60*1000)) + 1);
         const prevEnd = new Date(startDate.getTime() - 24*60*60*1000);
         const prevStart = new Date(prevEnd.getTime() - (days-1)*24*60*60*1000);
         const iso = (d)=>d.toISOString().slice(0,10);
         
         let deltas = { clicks: 0, impressions: 0, ctr: 0, position: 0 };
         try {
-          const url2 = `/api/bing/data/${encodeURIComponent(qs('site'))}?searchType=${searchType}&days=${days}&dataType=totals`;
+          const url2 = `/api/bing/data/${encodeURIComponent(bingSiteUrl)}?searchType=${searchType}&startDate=${iso(prevStart)}&endDate=${iso(prevEnd)}&dataType=totals`;
           const r2 = await fetch(url2, { credentials:'include' }); 
           const d2 = await r2.json();
           if (r2.ok && d2.success) {
