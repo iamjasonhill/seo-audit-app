@@ -364,6 +364,38 @@ router.get('/scheduler/tick', async (req, res) => {
   }
 });
 
+// GET /api/bing/test-api - Test Bing API connection and get sites
+router.get('/test-api', requireAuth, async (req, res) => {
+  try {
+    const { BingApiClient } = require('../services/bingApi');
+    
+    // Get API key from user's stored key or environment
+    const apiKeyRow = await databaseService.prisma.bingApiKey.findUnique({ where: { userId: req.user.id } });
+    const apiKey = apiKeyRow?.apiKey || process.env.BING_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(400).json({ 
+        error: 'No API Key', 
+        message: 'No Bing API key found. Please configure your Bing Webmaster Tools API key.' 
+      });
+    }
+    
+    const bingApi = new BingApiClient(apiKey);
+    const sites = await bingApi.getUserSites();
+    
+    res.json({
+      success: true,
+      message: `Found ${sites.length} sites`,
+      apiKeyConfigured: !!apiKey,
+      sites: sites,
+      rawResponse: sites
+    });
+  } catch (err) {
+    logger.error('Bing API test error:', err.message);
+    res.status(500).json({ error: 'BingApiTestError', message: err.message });
+  }
+});
+
 // GET /api/bing/data/:siteUrl - Get Bing data for a specific site
 router.get('/data/:siteUrl', requireAuth, async (req, res) => {
   try {

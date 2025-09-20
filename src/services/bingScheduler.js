@@ -309,15 +309,23 @@ class BingScheduler {
   // Method to discover and auto-register all available Bing domains for a user
   async discoverAndRegisterDomains(userId) {
     try {
+      logger.info(`Starting Bing domain discovery for user ${userId}`);
+      
       const bingApi = await ensureBingApiClient(userId);
+      logger.info(`Bing API client created for user ${userId}`);
+      
       const sites = await bingApi.getUserSites();
+      logger.info(`Bing API returned ${sites ? sites.length : 0} sites for user ${userId}`);
       
       if (!sites || sites.length === 0) {
-        logger.warn(`No Bing sites found for user ${userId}`);
+        logger.warn(`No Bing sites found for user ${userId}. This could mean:`);
+        logger.warn(`1. No sites are verified in Bing Webmaster Tools`);
+        logger.warn(`2. The API key doesn't have access to any sites`);
+        logger.warn(`3. The API key is invalid or expired`);
         return [];
       }
 
-      logger.info(`Discovered ${sites.length} Bing sites for user ${userId}`);
+      logger.info(`Discovered ${sites.length} Bing sites for user ${userId}:`, sites.map(s => s.siteUrl));
       
       const registeredSites = [];
       const now = new Date();
@@ -325,6 +333,14 @@ class BingScheduler {
       for (let i = 0; i < sites.length; i++) {
         const site = sites[i];
         try {
+          // Validate site URL
+          if (!site.siteUrl || site.siteUrl === 'undefined' || site.siteUrl === 'null') {
+            logger.warn(`Skipping invalid site URL: ${JSON.stringify(site)}`);
+            continue;
+          }
+          
+          logger.info(`Processing site ${i + 1}/${sites.length}: ${site.siteUrl}`);
+          
           // Check if already registered
           const existing = await databaseService.prisma.$queryRawUnsafe(`
             SELECT id FROM bing_user_property 
@@ -363,6 +379,9 @@ class BingScheduler {
       
     } catch (error) {
       logger.error(`Error discovering Bing domains for user ${userId}:`, error.message);
+      if (error.message.includes('No Bing API key')) {
+        throw new Error('Bing API key not configured. Please add your Bing Webmaster Tools API key to the environment variables.');
+      }
       throw error;
     }
   }

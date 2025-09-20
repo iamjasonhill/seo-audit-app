@@ -34,23 +34,48 @@ class BingApiClient {
         const url = `${this.baseUrl}/${endpoint}?apikey=${encodeURIComponent(this.apiKey)}`;
         logger.info(`Trying Bing API endpoint: ${endpoint}`);
         const resp = await axios.get(url);
-        logger.info(`Bing API ${endpoint} response:`, JSON.stringify(resp.data, null, 2));
+        logger.info(`Bing API ${endpoint} response status: ${resp.status}`);
+        logger.info(`Bing API ${endpoint} response data:`, JSON.stringify(resp.data, null, 2));
         
         // Response format: { d: [{"Url": "https://example.com/", ...}, ...] } 
         const data = resp.data || {};
         const list = Array.isArray(data.d) ? data.d : (Array.isArray(data) ? data : []);
         
         if (list.length > 0) {
-          logger.info(`Found sites with endpoint: ${endpoint}`);
-          return list.map(site => {
+          logger.info(`Found ${list.length} sites with endpoint: ${endpoint}`);
+          const sites = list.map(site => {
             // Handle both string and object responses
             // Bing API returns objects with 'Url' property (capital U)
-            const siteUrl = typeof site === 'string' ? site : (site?.Url || site?.siteUrl || site?.url || String(site));
+            let siteUrl;
+            if (typeof site === 'string') {
+              siteUrl = site;
+            } else if (site && typeof site === 'object') {
+              siteUrl = site.Url || site.siteUrl || site.url || site.URL || String(site);
+            } else {
+              siteUrl = String(site);
+            }
+            
+            // Ensure siteUrl is valid
+            if (!siteUrl || siteUrl === 'undefined' || siteUrl === 'null') {
+              logger.warn(`Invalid site URL found: ${JSON.stringify(site)}`);
+              return null;
+            }
+            
+            logger.info(`Mapped site: ${siteUrl}`);
             return { siteUrl };
-          });
+          }).filter(site => site !== null); // Remove null entries
+          
+          logger.info(`Returning ${sites.length} valid sites`);
+          return sites;
+        } else {
+          logger.info(`No sites found in response for endpoint: ${endpoint}`);
         }
       } catch (error) {
-        logger.warn(`Endpoint ${endpoint} failed:`, error.message);
+        logger.error(`Endpoint ${endpoint} failed:`, error.message);
+        if (error.response) {
+          logger.error(`Response status: ${error.response.status}`);
+          logger.error(`Response data:`, JSON.stringify(error.response.data, null, 2));
+        }
       }
     }
     

@@ -340,6 +340,7 @@
                     <button id="bingSyncRefresh" class="audit-btn" style="width:auto;background:#6c757d"><i class="fas fa-rotate"></i> Refresh</button>
                     <button id="bingDiscoverBtn" class="audit-btn" style="width:auto;background:#0078d4"><i class="fas fa-search"></i> Discover Domains</button>
                     <button id="bingSchedulerTick" class="audit-btn" style="width:auto;background:#28a745"><i class="fas fa-play"></i> Manual Sync</button>
+                    <button id="bingTestApiBtn" class="audit-btn" style="width:auto;background:#ffc107; color:#000"><i class="fas fa-bug"></i> Test API</button>
                 </div>
                 <div id="bingSyncRegistry"></div>
             </div>
@@ -1473,6 +1474,7 @@
                 const refreshBtn = document.getElementById('bingSyncRefresh');
                 const discoverBtn = document.getElementById('bingDiscoverBtn');
                 const schedulerTickBtn = document.getElementById('bingSchedulerTick');
+                const testApiBtn = document.getElementById('bingTestApiBtn');
 
                 if (refreshBtn) {
                     refreshBtn.addEventListener('click', () => this.loadBingSyncRegistry());
@@ -1484,6 +1486,10 @@
 
                 if (schedulerTickBtn) {
                     schedulerTickBtn.addEventListener('click', () => this.triggerBingScheduler());
+                }
+
+                if (testApiBtn) {
+                    testApiBtn.addEventListener('click', () => this.testBingApi());
                 }
 
                 // Load Bing sync registry on initialization
@@ -1691,6 +1697,43 @@
                 } finally {
                     tickBtn.disabled = false;
                     tickBtn.innerHTML = orig;
+                }
+            }
+
+            async testBingApi() {
+                const testBtn = document.getElementById('bingTestApiBtn');
+                if (!testBtn) return;
+                
+                testBtn.disabled = true;
+                const orig = testBtn.innerHTML;
+                testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+                
+                try {
+                    const resp = await fetch('/api/bing/test-api', {
+                        credentials: 'include'
+                    });
+                    const data = await resp.json();
+                    
+                    if (!resp.ok || !data.success) {
+                        throw new Error(data.message || 'API test failed');
+                    }
+                    
+                    // Show detailed results
+                    const message = `API Test Results:
+• API Key Configured: ${data.apiKeyConfigured ? 'Yes' : 'No'}
+• Sites Found: ${data.sites.length}
+• Sites: ${data.sites.map(s => s.siteUrl).join(', ') || 'None'}`;
+                    
+                    this.showSuccess(message);
+                    
+                    // Also log to console for debugging
+                    console.log('Bing API Test Results:', data);
+                    
+                } catch (err) {
+                    this.showError(`API Test Failed: ${err.message}`);
+                } finally {
+                    testBtn.disabled = false;
+                    testBtn.innerHTML = orig;
                 }
             }
         }
