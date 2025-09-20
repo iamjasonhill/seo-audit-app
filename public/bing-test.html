@@ -143,6 +143,43 @@
       <div id="bulkBackfillResult" class="result" style="display:none;"></div>
     </div>
 
+    <!-- Scheduler Management -->
+    <div class="card">
+      <h3><i class="fas fa-clock"></i> Scheduler Management</h3>
+      <p>Set up scheduled syncing for your Bing properties (like GSC scheduler).</p>
+      
+      <div class="form-group">
+        <button class="btn btn-secondary" id="setupTablesBtn">
+          <i class="fas fa-database"></i> Setup Scheduler Tables
+        </button>
+        <small class="form-text text-muted">Creates the required database tables for the scheduler</small>
+      </div>
+
+      <div class="form-group">
+        <label for="schedulerSiteUrl">Site URL to add to scheduler</label>
+        <input type="text" id="schedulerSiteUrl" placeholder="https://example.com/">
+      </div>
+      
+      <div class="form-group">
+        <label for="schedulerInterval">Sync interval (hours)</label>
+        <input type="number" id="schedulerInterval" value="24" min="1" max="168">
+      </div>
+      
+      <button class="btn btn-success" id="addToSchedulerBtn">
+        <i class="fas fa-plus"></i> Add to Scheduler
+      </button>
+      
+      <button class="btn btn-warning" id="removeFromSchedulerBtn">
+        <i class="fas fa-minus"></i> Remove from Scheduler
+      </button>
+      
+      <button class="btn btn-info" id="listScheduledBtn">
+        <i class="fas fa-list"></i> List Scheduled Properties
+      </button>
+      
+      <div id="schedulerResult" class="result" style="display:none;"></div>
+    </div>
+
     <!-- Data Retrieval -->
     <div class="card">
       <h3><i class="fas fa-database"></i> Retrieve Stored Data</h3>
@@ -445,6 +482,162 @@
       }
     }
 
+    async function setupSchedulerTables() {
+      const button = document.getElementById('setupTablesBtn');
+      showLoading(button);
+
+      try {
+        const { response, data } = await apiCall('/setup-tables');
+        
+        if (response.ok && data.success) {
+          showResult('schedulerResult', `
+            <div class="status success">Scheduler tables created successfully!</div>
+            <p>${data.message}</p>
+          `);
+        } else {
+          showResult('schedulerResult', `
+            <div class="status error">Failed to create tables</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('schedulerResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    async function addToScheduler() {
+      const button = document.getElementById('addToSchedulerBtn');
+      showLoading(button);
+
+      const siteUrl = document.getElementById('schedulerSiteUrl').value.trim();
+      const syncIntervalHours = parseInt(document.getElementById('schedulerInterval').value);
+
+      if (!siteUrl) {
+        showResult('schedulerResult', '<div class="status error">Please enter a site URL</div>', true);
+        showLoading(button, false);
+        return;
+      }
+
+      try {
+        const { response, data } = await apiCall('/scheduler/add', {
+          siteUrl,
+          syncIntervalHours
+        });
+        
+        if (response.ok && data.success) {
+          showResult('schedulerResult', `
+            <div class="status success">Property added to scheduler!</div>
+            <p>${data.message}</p>
+          `);
+        } else {
+          showResult('schedulerResult', `
+            <div class="status error">Failed to add property</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('schedulerResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    async function removeFromScheduler() {
+      const button = document.getElementById('removeFromSchedulerBtn');
+      showLoading(button);
+
+      const siteUrl = document.getElementById('schedulerSiteUrl').value.trim();
+
+      if (!siteUrl) {
+        showResult('schedulerResult', '<div class="status error">Please enter a site URL</div>', true);
+        showLoading(button, false);
+        return;
+      }
+
+      try {
+        const { response, data } = await apiCall('/scheduler/remove', {
+          method: 'DELETE',
+          siteUrl
+        });
+        
+        if (response.ok && data.success) {
+          showResult('schedulerResult', `
+            <div class="status success">Property removed from scheduler!</div>
+            <p>${data.message}</p>
+          `);
+        } else {
+          showResult('schedulerResult', `
+            <div class="status error">Failed to remove property</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('schedulerResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
+    async function listScheduledProperties() {
+      const button = document.getElementById('listScheduledBtn');
+      showLoading(button);
+
+      try {
+        const { response, data } = await apiCall('/scheduler/properties', { method: 'GET' });
+        
+        if (response.ok && data.success) {
+          const properties = data.properties || [];
+          if (properties.length === 0) {
+            showResult('schedulerResult', `
+              <div class="status info">No scheduled properties found</div>
+              <p>Add properties to the scheduler to see them here.</p>
+            `);
+          } else {
+            const propertiesList = properties.map(prop => `
+              <div style="border: 1px solid #e9ecef; padding: 0.5rem; margin: 0.25rem 0; border-radius: 4px;">
+                <strong>${prop.siteUrl}</strong><br>
+                <small>
+                  Interval: ${prop.syncIntervalHours}h | 
+                  Priority: ${prop.priorityOrder} | 
+                  Enabled: ${prop.enabled ? 'Yes' : 'No'}<br>
+                  Last Sync: ${prop.lastFullSyncAt ? new Date(prop.lastFullSyncAt).toLocaleString() : 'Never'}<br>
+                  Next Due: ${prop.nextSyncDueAt ? new Date(prop.nextSyncDueAt).toLocaleString() : 'Not scheduled'}
+                </small>
+              </div>
+            `).join('');
+            
+            showResult('schedulerResult', `
+              <div class="status success">Found ${properties.length} scheduled properties</div>
+              ${propertiesList}
+            `);
+          }
+        } else {
+          showResult('schedulerResult', `
+            <div class="status error">Failed to get scheduled properties</div>
+            <p>${data.message || 'Unknown error'}</p>
+          `, true);
+        }
+      } catch (error) {
+        showResult('schedulerResult', `
+          <div class="status error">Request failed</div>
+          <p>${error.message}</p>
+        `, true);
+      } finally {
+        showLoading(button, false);
+      }
+    }
+
     async function retrieveData() {
       const button = document.getElementById('retrieveDataBtn');
       showLoading(button);
@@ -537,6 +730,10 @@
       document.getElementById('syncDataBtn').addEventListener('click', syncData);
       document.getElementById('backfillDataBtn').addEventListener('click', backfillData);
       document.getElementById('bulkBackfillBtn').addEventListener('click', bulkBackfillAll);
+      document.getElementById('setupTablesBtn').addEventListener('click', setupSchedulerTables);
+      document.getElementById('addToSchedulerBtn').addEventListener('click', addToScheduler);
+      document.getElementById('removeFromSchedulerBtn').addEventListener('click', removeFromScheduler);
+      document.getElementById('listScheduledBtn').addEventListener('click', listScheduledProperties);
       document.getElementById('retrieveDataBtn').addEventListener('click', retrieveData);
       document.getElementById('loadSyncStatusBtn').addEventListener('click', loadSyncStatus);
 
