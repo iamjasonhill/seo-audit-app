@@ -1550,22 +1550,22 @@
                             <tbody>
                                 ${properties.map(prop => `
                                     <tr>
-                                        <td>${prop.priorityOrder ?? 0}</td>
+                                        <td>${prop.priority_order ?? 0}</td>
                                         <td>
-                                            <a href="/property?site=${encodeURIComponent(prop.siteUrl)}" class="view-audit-btn" target="_blank">
-                                                ${prop.siteUrl}
+                                            <a href="/property?site=${encodeURIComponent(prop.site_url)}" class="view-audit-btn" target="_blank">
+                                                ${prop.site_url}
                                             </a>
                                         </td>
-                                        ${isAdmin ? `<td>${prop.email || prop.username || prop.userId || ''}</td>` : ''}
+                                        ${isAdmin ? `<td>${prop.email || prop.username || prop.user_id || ''}</td>` : ''}
                                         <td>${prop.enabled ? 'Yes' : 'No'}</td>
-                                        <td>${fmt(prop.lastFullSyncAt)}</td>
-                                        <td>${fmt(prop.nextSyncDueAt)}</td>
+                                        <td>${fmt(prop.last_full_sync_at)}</td>
+                                        <td>${fmt(prop.next_sync_due_at)}</td>
                                         <td>
-                                            <button class="audit-btn" data-bing-sync-now="${encodeURIComponent(prop.siteUrl)}" 
+                                            <button class="audit-btn" data-bing-sync-now="${encodeURIComponent(prop.site_url)}" 
                                                     style="width:auto;background:#198754; margin-right:0.25rem">
                                                 <i class="fas fa-forward"></i> Sync now
                                             </button>
-                                            <button class="delete-btn" data-bing-unregister="${encodeURIComponent(prop.siteUrl)}" 
+                                            <button class="delete-btn" data-bing-unregister="${encodeURIComponent(prop.site_url)}" 
                                                     style="width:auto; margin-left:0.25rem">
                                                 <i class="fas fa-trash"></i> Remove
                                             </button>
