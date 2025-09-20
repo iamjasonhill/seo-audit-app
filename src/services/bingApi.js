@@ -26,17 +26,36 @@ class BingApiClient {
 
   async getUserSites() {
     this.requireKey();
-    const url = `${this.baseUrl}/GetUserSites?apikey=${encodeURIComponent(this.apiKey)}`;
-    const resp = await axios.get(url);
-    // Response format: { d: [{"Url": "https://example.com/", ...}, ...] } 
-    const data = resp.data || {};
-    const list = Array.isArray(data.d) ? data.d : (Array.isArray(data) ? data : []);
-    return list.map(site => {
-      // Handle both string and object responses
-      // Bing API returns objects with 'Url' property (capital U)
-      const siteUrl = typeof site === 'string' ? site : (site?.Url || site?.siteUrl || site?.url || String(site));
-      return { siteUrl };
-    });
+    // Try both GetUserSites and GetSites as per the research
+    const possibleEndpoints = ['GetUserSites', 'GetSites'];
+    
+    for (const endpoint of possibleEndpoints) {
+      try {
+        const url = `${this.baseUrl}/${endpoint}?apikey=${encodeURIComponent(this.apiKey)}`;
+        logger.info(`Trying Bing API endpoint: ${endpoint}`);
+        const resp = await axios.get(url);
+        logger.info(`Bing API ${endpoint} response:`, JSON.stringify(resp.data, null, 2));
+        
+        // Response format: { d: [{"Url": "https://example.com/", ...}, ...] } 
+        const data = resp.data || {};
+        const list = Array.isArray(data.d) ? data.d : (Array.isArray(data) ? data : []);
+        
+        if (list.length > 0) {
+          logger.info(`Found sites with endpoint: ${endpoint}`);
+          return list.map(site => {
+            // Handle both string and object responses
+            // Bing API returns objects with 'Url' property (capital U)
+            const siteUrl = typeof site === 'string' ? site : (site?.Url || site?.siteUrl || site?.url || String(site));
+            return { siteUrl };
+          });
+        }
+      } catch (error) {
+        logger.warn(`Endpoint ${endpoint} failed:`, error.message);
+      }
+    }
+    
+    logger.warn('No working sites endpoint found');
+    return [];
   }
 
   /**
@@ -64,32 +83,12 @@ class BingApiClient {
    */
   async getQueryStats(siteUrl, startDate, endDate, searchType = 'web', limit = 1000) {
     this.requireKey();
-    // Try different possible endpoint names for query stats
-    const possibleEndpoints = [
-      'GetQueryStats',
-      'GetSearchPerformance', 
-      'GetQueryPerformance',
-      'GetSearchQueries'
-    ];
-    
-    for (const endpoint of possibleEndpoints) {
-      try {
-        const url = `${this.baseUrl}/${endpoint}?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`;
-        logger.info(`Trying Bing API endpoint: ${endpoint}`);
-        const resp = await axios.get(url);
-        logger.info(`Bing API ${endpoint} response:`, JSON.stringify(resp.data, null, 2));
-        const data = resp.data || {};
-        if (data.d && data.d.length > 0) {
-          logger.info(`Found data with endpoint: ${endpoint}`);
-          return data.d;
-        }
-      } catch (error) {
-        logger.warn(`Endpoint ${endpoint} failed:`, error.message);
-      }
-    }
-    
-    logger.warn('No working query stats endpoint found');
-    return [];
+    const url = `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`;
+    logger.info(`Bing API GetQueryStats URL: ${url}`);
+    const resp = await axios.get(url);
+    logger.info(`Bing API GetQueryStats response:`, JSON.stringify(resp.data, null, 2));
+    const data = resp.data || {};
+    return data.d || [];
   }
 
   /**
@@ -102,32 +101,12 @@ class BingApiClient {
    */
   async getPageStats(siteUrl, startDate, endDate, searchType = 'web', limit = 1000) {
     this.requireKey();
-    // Try different possible endpoint names for page stats
-    const possibleEndpoints = [
-      'GetPageStats',
-      'GetPagePerformance',
-      'GetUrlStats',
-      'GetPageData'
-    ];
-    
-    for (const endpoint of possibleEndpoints) {
-      try {
-        const url = `${this.baseUrl}/${endpoint}?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`;
-        logger.info(`Trying Bing API endpoint: ${endpoint}`);
-        const resp = await axios.get(url);
-        logger.info(`Bing API ${endpoint} response:`, JSON.stringify(resp.data, null, 2));
-        const data = resp.data || {};
-        if (data.d && data.d.length > 0) {
-          logger.info(`Found data with endpoint: ${endpoint}`);
-          return data.d;
-        }
-      } catch (error) {
-        logger.warn(`Endpoint ${endpoint} failed:`, error.message);
-      }
-    }
-    
-    logger.warn('No working page stats endpoint found');
-    return [];
+    const url = `${this.baseUrl}/GetPageStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`;
+    logger.info(`Bing API GetPageStats URL: ${url}`);
+    const resp = await axios.get(url);
+    logger.info(`Bing API GetPageStats response:`, JSON.stringify(resp.data, null, 2));
+    const data = resp.data || {};
+    return data.d || [];
   }
 
   /**
@@ -139,34 +118,13 @@ class BingApiClient {
    */
   async getDailyTotals(siteUrl, startDate, endDate, searchType = 'web') {
     this.requireKey();
-    // Try different possible endpoint names for daily totals
-    const possibleEndpoints = [
-      'GetQueryStats',
-      'GetSearchPerformance',
-      'GetDailyStats',
-      'GetSiteStats'
-    ];
-    
-    for (const endpoint of possibleEndpoints) {
-      try {
-        const url = `${this.baseUrl}/${endpoint}?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&groupBy=date`;
-        logger.info(`Trying Bing API endpoint: ${endpoint}`);
-        logger.info(`Bing API URL: ${url}`);
-        const resp = await axios.get(url);
-        logger.info(`Bing API response status: ${resp.status}`);
-        logger.info(`Bing API response data:`, JSON.stringify(resp.data, null, 2));
-        const data = resp.data || {};
-        if (data.d && data.d.length > 0) {
-          logger.info(`Found data with endpoint: ${endpoint}`);
-          return data.d;
-        }
-      } catch (error) {
-        logger.warn(`Endpoint ${endpoint} failed:`, error.message);
-      }
-    }
-    
-    logger.warn('No working daily totals endpoint found');
-    return [];
+    // Use GetRankAndTrafficStats for daily totals as per the research
+    const url = `${this.baseUrl}/GetRankAndTrafficStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}`;
+    logger.info(`Bing API GetRankAndTrafficStats URL: ${url}`);
+    const resp = await axios.get(url);
+    logger.info(`Bing API GetRankAndTrafficStats response:`, JSON.stringify(resp.data, null, 2));
+    const data = resp.data || {};
+    return data.d || [];
   }
 }
 
