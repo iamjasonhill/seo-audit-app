@@ -290,8 +290,8 @@ router.post('/setup-tables', requireAuth, async (req, res) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    // Create tables if they don't exist
-    await databaseService.prisma.$executeRaw`
+    // Create tables if they don't exist using raw SQL
+    const createTablesSQL = `
       CREATE TABLE IF NOT EXISTS bing_user_property (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL,
@@ -305,20 +305,18 @@ router.post('/setup-tables', requireAuth, async (req, res) => {
         updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(user_id, site_url)
       );
-    `;
 
-    await databaseService.prisma.$executeRaw`
       CREATE INDEX IF NOT EXISTS idx_bing_user_property_scheduler 
       ON bing_user_property(enabled, next_sync_due_at, priority_order, last_full_sync_at);
-    `;
 
-    await databaseService.prisma.$executeRaw`
       CREATE TABLE IF NOT EXISTS bing_sync_lock (
         id TEXT PRIMARY KEY,
         locked_until TIMESTAMP NOT NULL,
         locked_by TEXT NOT NULL
       );
     `;
+
+    await databaseService.prisma.$executeRawUnsafe(createTablesSQL);
 
     res.json({
       success: true,

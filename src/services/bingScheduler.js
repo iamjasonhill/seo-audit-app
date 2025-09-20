@@ -124,11 +124,13 @@ class BingScheduler {
 
   async findNextDueProperty() {
     const now = new Date();
-    const rows = await databaseService.prisma.bingUserProperty.findMany({
-      where: { enabled: true, OR: [{ nextSyncDueAt: null }, { nextSyncDueAt: { lte: now } }] },
-      orderBy: [ { nextSyncDueAt: 'asc' }, { priorityOrder: 'asc' }, { lastFullSyncAt: 'asc' } ],
-      take: 10,
-    });
+    const rows = await databaseService.prisma.$queryRawUnsafe(`
+      SELECT * FROM bing_user_property 
+      WHERE enabled = true 
+        AND (next_sync_due_at IS NULL OR next_sync_due_at <= $1)
+      ORDER BY next_sync_due_at ASC, priority_order ASC, last_full_sync_at ASC
+      LIMIT 10
+    `, now);
     return rows[0] || null;
   }
 
@@ -150,11 +152,12 @@ class BingScheduler {
 
       if (tasks.length === 0) {
         // Up to date; schedule next interval
-        const next = new Date(Date.now() + (prop.syncIntervalHours || 24) * 3600 * 1000);
-        await databaseService.prisma.bingUserProperty.update({ 
-          where: { id: prop.id }, 
-          data: { lastFullSyncAt: new Date(), nextSyncDueAt: next } 
-        });
+        const next = new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000);
+        await databaseService.prisma.$executeRawUnsafe(`
+          UPDATE bing_user_property 
+          SET last_full_sync_at = NOW(), next_sync_due_at = $1, updated_at = NOW()
+          WHERE id = $2
+        `, next, prop.id);
         return;
       }
 
@@ -199,13 +202,14 @@ class BingScheduler {
       
       // Schedule next sync
       const next = complete ? 
-        new Date(Date.now() + (prop.syncIntervalHours || 24) * 3600 * 1000) : 
+        new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000) : 
         new Date(Date.now() + 5 * 60 * 1000); // 5 minutes if not complete
       
-      await databaseService.prisma.bingUserProperty.update({ 
-        where: { id: prop.id }, 
-        data: { lastFullSyncAt: new Date(), nextSyncDueAt: next } 
-      });
+      await databaseService.prisma.$executeRawUnsafe(`
+        UPDATE bing_user_property 
+        SET last_full_sync_at = NOW(), next_sync_due_at = $1, updated_at = NOW()
+        WHERE id = $2
+      `, next, prop.id);
       
     } catch (e) {
       logger.error('Bing Scheduler domain sync error:', e.message);
@@ -223,23 +227,18 @@ class BingScheduler {
     const { syncIntervalHours = 24, priorityOrder = 0 } = options;
     
     try {
-      await databaseService.prisma.bingUserProperty.upsert({
-        where: { userId_siteUrl: { userId, siteUrl } },
-        update: { 
-          enabled: true,
-          syncIntervalHours,
-          priorityOrder,
-          updatedAt: new Date()
-        },
-        create: {
-          userId,
-          siteUrl,
-          enabled: true,
-          syncIntervalHours,
-          priorityOrder,
-          nextSyncDueAt: new Date() // Start syncing immediately
-        }
-      });
+      // Use raw SQL to avoid Prisma model dependency
+      await databaseService.prisma.$executeRawUnsafe(`
+        INSERT INTO bing_user_property (user_id, site_url, enabled, sync_interval_hours, priority_order, next_sync_due_at, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+        ON CONFLICT (user_id, site_url) 
+        DO UPDATE SET 
+          enabled = $3,
+          sync_interval_hours = $4,
+          priority_order = $5,
+          updated_at = NOW()
+      `, userId, siteUrl, true, syncIntervalHours, priorityOrder, new Date());
+      
       logger.info(`Added Bing property ${siteUrl} for user ${userId} to scheduler`);
     } catch (error) {
       logger.error(`Error adding Bing property ${siteUrl} for user ${userId}:`, error.message);
@@ -250,9 +249,11 @@ class BingScheduler {
   // Method to remove a property from the scheduler
   async removeProperty(userId, siteUrl) {
     try {
-      await databaseService.prisma.bingUserProperty.delete({
-        where: { userId_siteUrl: { userId, siteUrl } }
-      });
+      await databaseService.prisma.$executeRawUnsafe(`
+        DELETE FROM bing_user_property 
+        WHERE user_id = $1 AND site_url = $2
+      `, userId, siteUrl);
+      
       logger.info(`Removed Bing property ${siteUrl} for user ${userId} from scheduler`);
     } catch (error) {
       logger.error(`Error removing Bing property ${siteUrl} for user ${userId}:`, error.message);
