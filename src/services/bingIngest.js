@@ -107,7 +107,29 @@ class BingIngestService {
       // Process and store each day's data
       for (const dayData of dailyData) {
         try {
-          const date = new Date(dayData.Date || dayData.date);
+          // Handle different date formats from Bing API
+          let date;
+          const dateValue = dayData.Date || dayData.date || dayData.DateKey || dayData.dateKey;
+          if (dateValue) {
+            // Try different date parsing approaches
+            if (typeof dateValue === 'string') {
+              // Handle YYYY-MM-DD format
+              if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                date = new Date(dateValue + 'T00:00:00.000Z');
+              } else {
+                date = new Date(dateValue);
+              }
+            } else {
+              date = new Date(dateValue);
+            }
+          }
+          
+          // Validate date
+          if (!date || isNaN(date.getTime())) {
+            logger.warn(`Invalid date for dayData:`, dayData);
+            continue;
+          }
+          
           const clicks = parseInt(dayData.Clicks || dayData.clicks || 0);
           const impressions = parseInt(dayData.Impressions || dayData.impressions || 0);
           const ctr = parseFloat(dayData.CTR || dayData.ctr || 0);
@@ -188,7 +210,27 @@ class BingIngestService {
       // Process and store query data
       for (const query of queryData) {
         try {
-          const date = new Date(query.Date || query.date);
+          // Handle different date formats from Bing API
+          let date;
+          const dateValue = query.Date || query.date || query.DateKey || query.dateKey;
+          if (dateValue) {
+            if (typeof dateValue === 'string') {
+              if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                date = new Date(dateValue + 'T00:00:00.000Z');
+              } else {
+                date = new Date(dateValue);
+              }
+            } else {
+              date = new Date(dateValue);
+            }
+          }
+          
+          // Validate date
+          if (!date || isNaN(date.getTime())) {
+            logger.warn(`Invalid date for query:`, query);
+            continue;
+          }
+          
           const queryText = query.Query || query.query || '';
           const clicks = parseInt(query.Clicks || query.clicks || 0);
           const impressions = parseInt(query.Impressions || query.impressions || 0);
@@ -274,7 +316,27 @@ class BingIngestService {
       // Process and store page data
       for (const page of pageData) {
         try {
-          const date = new Date(page.Date || page.date);
+          // Handle different date formats from Bing API
+          let date;
+          const dateValue = page.Date || page.date || page.DateKey || page.dateKey;
+          if (dateValue) {
+            if (typeof dateValue === 'string') {
+              if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                date = new Date(dateValue + 'T00:00:00.000Z');
+              } else {
+                date = new Date(dateValue);
+              }
+            } else {
+              date = new Date(dateValue);
+            }
+          }
+          
+          // Validate date
+          if (!date || isNaN(date.getTime())) {
+            logger.warn(`Invalid date for page:`, page);
+            continue;
+          }
+          
           const pageUrl = page.Page || page.page || '';
           const clicks = parseInt(page.Clicks || page.clicks || 0);
           const impressions = parseInt(page.Impressions || page.impressions || 0);
