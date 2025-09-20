@@ -38,6 +38,68 @@ class BingApiClient {
       return { siteUrl };
     });
   }
+
+  /**
+   * Get search performance data for a site
+   * @param {string} siteUrl - The site URL
+   * @param {string} startDate - Start date (YYYY-MM-DD)
+   * @param {string} endDate - End date (YYYY-MM-DD)
+   * @param {string} searchType - 'web' or 'image' (default: 'web')
+   */
+  async getSearchPerformance(siteUrl, startDate, endDate, searchType = 'web') {
+    this.requireKey();
+    const url = `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}`;
+    const resp = await axios.get(url);
+    const data = resp.data || {};
+    return data.d || [];
+  }
+
+  /**
+   * Get query-level performance data
+   * @param {string} siteUrl - The site URL
+   * @param {string} startDate - Start date (YYYY-MM-DD)
+   * @param {string} endDate - End date (YYYY-MM-DD)
+   * @param {string} searchType - 'web' or 'image' (default: 'web')
+   * @param {number} limit - Number of results to return (default: 1000)
+   */
+  async getQueryStats(siteUrl, startDate, endDate, searchType = 'web', limit = 1000) {
+    this.requireKey();
+    const url = `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`;
+    const resp = await axios.get(url);
+    const data = resp.data || {};
+    return data.d || [];
+  }
+
+  /**
+   * Get page-level performance data
+   * @param {string} siteUrl - The site URL
+   * @param {string} startDate - Start date (YYYY-MM-DD)
+   * @param {string} endDate - End date (YYYY-MM-DD)
+   * @param {string} searchType - 'web' or 'image' (default: 'web')
+   * @param {number} limit - Number of results to return (default: 1000)
+   */
+  async getPageStats(siteUrl, startDate, endDate, searchType = 'web', limit = 1000) {
+    this.requireKey();
+    const url = `${this.baseUrl}/GetPageStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`;
+    const resp = await axios.get(url);
+    const data = resp.data || {};
+    return data.d || [];
+  }
+
+  /**
+   * Get daily totals for a site (aggregated data)
+   * @param {string} siteUrl - The site URL
+   * @param {string} startDate - Start date (YYYY-MM-DD)
+   * @param {string} endDate - End date (YYYY-MM-DD)
+   * @param {string} searchType - 'web' or 'image' (default: 'web')
+   */
+  async getDailyTotals(siteUrl, startDate, endDate, searchType = 'web') {
+    this.requireKey();
+    const url = `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&groupBy=date`;
+    const resp = await axios.get(url);
+    const data = resp.data || {};
+    return data.d || [];
+  }
 }
 
 module.exports = {

@@ -255,3 +255,62 @@ model BingUserSelection {
 
   @@map("bing_user_selection")
 }
+
+// Bing Webmaster Tools data tables (mirroring GSC structure)
+model BingSyncStatus {
+  id              String   @id @default(cuid())
+  siteUrl         String   @map("site_url")
+  searchType      String   @map("search_type")
+  dimension       String   @map("dimension") // totals, page, query
+  lastSyncedDate  DateTime? @map("last_synced_date")
+  lastRunAt       DateTime? @map("last_run_at")
+  status          String?  // ok, running, error
+  message         String?
+
+  @@index([siteUrl, searchType, dimension], map: "idx_bing_sync_status")
+  @@map("bing_sync_status")
+}
+
+model BingTotalsDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType])
+  @@index([siteUrl, date], map: "idx_bing_totals_daily_site_date")
+  @@map("bing_totals_daily")
+}
+
+model BingPagesDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  page       String
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType, page])
+  @@index([siteUrl, date, page], map: "idx_bing_pages_daily_site_date_page")
+  @@map("bing_pages_daily")
+}
+
+model BingQueriesDaily {
+  siteUrl    String   @map("site_url")
+  date       DateTime @map("date")
+  searchType String   @map("search_type")
+  query      String
+  clicks     Int
+  impressions Int
+  ctr        Float
+  position   Float
+
+  @@id([siteUrl, date, searchType, query])
+  @@index([siteUrl, date, query], map: "idx_bing_queries_daily_site_date_query")
+  @@map("bing_queries_daily")
+}
