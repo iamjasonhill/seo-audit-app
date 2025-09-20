@@ -90,6 +90,11 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
 
+// Serve admin page
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
 // Serve report page
 app.get('/report', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'report.html'));
