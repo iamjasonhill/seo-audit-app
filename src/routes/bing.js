@@ -275,6 +275,7 @@ router.get('/sync-status', requireAuth, async (req, res) => {
 // POST /api/bing/sync/discover - Discover and register all available Bing domains
 router.post('/sync/discover', requireAuth, async (req, res) => {
   try {
+    logger.info(`Bing domain discovery requested by user ${req.user.id}`);
     const registeredSites = await bingScheduler.discoverAndRegisterDomains(req.user.id);
     
     res.json({
@@ -284,7 +285,21 @@ router.post('/sync/discover', requireAuth, async (req, res) => {
     });
   } catch (err) {
     logger.error('Bing domain discovery error:', err.message);
-    res.status(500).json({ error: 'BingDiscoveryError', message: err.message });
+    logger.error('Full error:', err);
+    
+    // Provide more specific error messages
+    let errorMessage = err.message;
+    if (err.message.includes('No Bing API key')) {
+      errorMessage = 'Bing API key not configured. Please add your Bing Webmaster Tools API key to the environment variables.';
+    } else if (err.message.includes('API key')) {
+      errorMessage = 'Invalid or expired Bing API key. Please check your API key configuration.';
+    }
+    
+    res.status(500).json({ 
+      error: 'BingDiscoveryError', 
+      message: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
 

@@ -80,11 +80,22 @@ async function computeWindow(siteUrl, searchType) {
 }
 
 async function ensureBingApiClient(userId) {
+  // First try to get API key from user's stored key
   const apiKeyRow = await databaseService.prisma.bingApiKey.findUnique({ where: { userId } });
-  if (!apiKeyRow || !apiKeyRow.apiKey) {
-    throw new Error('No Bing API key for user');
+  let apiKey = apiKeyRow?.apiKey;
+  
+  // If no user-specific key, fall back to environment variable
+  if (!apiKey) {
+    apiKey = process.env.BING_API_KEY;
+    logger.info(`No user-specific Bing API key found for user ${userId}, using environment variable`);
   }
-  return new BingApiClient(apiKeyRow.apiKey);
+  
+  if (!apiKey) {
+    throw new Error('No Bing API key found. Please configure your Bing Webmaster Tools API key in environment variables or user settings.');
+  }
+  
+  logger.info(`Using Bing API key for user ${userId} (${apiKeyRow ? 'user-specific' : 'environment'})`);
+  return new BingApiClient(apiKey);
 }
 
 class BingScheduler {

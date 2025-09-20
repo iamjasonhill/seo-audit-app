@@ -729,6 +729,12 @@
                 const listDiv = document.getElementById('sitemapsList');
                 const submitBtn = document.getElementById('submitSitemapBtn');
                 const input = document.getElementById('sitemapUrl');
+                
+                // Only initialize if the sitemaps elements exist
+                if (!listDiv) {
+                    return; // Sitemaps panel not present on this page
+                }
+                
                 const render = (items) => {
                     if (!items || items.length === 0) {
                         listDiv.innerHTML = '<p>No sitemaps found for this property.</p>';
