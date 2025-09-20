@@ -113,8 +113,15 @@ class BingIngestService {
           if (dateValue) {
             // Try different date parsing approaches
             if (typeof dateValue === 'string') {
+              // Handle Microsoft /Date(timestamp)/ format
+              if (dateValue.startsWith('/Date(') && dateValue.endsWith(')/')) {
+                const timestamp = dateValue.match(/\/Date\((\d+)/);
+                if (timestamp) {
+                  date = new Date(parseInt(timestamp[1]));
+                }
+              }
               // Handle YYYY-MM-DD format
-              if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              else if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
                 date = new Date(dateValue + 'T00:00:00.000Z');
               } else {
                 date = new Date(dateValue);
@@ -215,7 +222,15 @@ class BingIngestService {
           const dateValue = query.Date || query.date || query.DateKey || query.dateKey;
           if (dateValue) {
             if (typeof dateValue === 'string') {
-              if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              // Handle Microsoft /Date(timestamp)/ format
+              if (dateValue.startsWith('/Date(') && dateValue.endsWith(')/')) {
+                const timestamp = dateValue.match(/\/Date\((\d+)/);
+                if (timestamp) {
+                  date = new Date(parseInt(timestamp[1]));
+                }
+              }
+              // Handle YYYY-MM-DD format
+              else if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
                 date = new Date(dateValue + 'T00:00:00.000Z');
               } else {
                 date = new Date(dateValue);
@@ -321,7 +336,15 @@ class BingIngestService {
           const dateValue = page.Date || page.date || page.DateKey || page.dateKey;
           if (dateValue) {
             if (typeof dateValue === 'string') {
-              if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              // Handle Microsoft /Date(timestamp)/ format
+              if (dateValue.startsWith('/Date(') && dateValue.endsWith(')/')) {
+                const timestamp = dateValue.match(/\/Date\((\d+)/);
+                if (timestamp) {
+                  date = new Date(parseInt(timestamp[1]));
+                }
+              }
+              // Handle YYYY-MM-DD format
+              else if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
                 date = new Date(dateValue + 'T00:00:00.000Z');
               } else {
                 date = new Date(dateValue);
