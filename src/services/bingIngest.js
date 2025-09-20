@@ -463,8 +463,8 @@ class BingIngestService {
     try {
       const results = await this.syncSite(siteUrl, searchType, {
         daysBack: monthsBack * 30,
-        includeQueries: false, // Limit queries to recent data only
-        includePages: false,   // Limit pages to recent data only
+        includeQueries: true,  // Include queries data
+        includePages: true,    // Include pages data
         includeTotals: true    // Backfill totals for full period
       });
 

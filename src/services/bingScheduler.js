@@ -211,8 +211,8 @@ class BingScheduler {
           
           const results = await bingIngest.syncSite(siteUrl, task.st, {
             daysBack: Math.ceil((actualEndDate - startDate) / (1000 * 60 * 60 * 24)),
-            includeQueries: false, // Limit to totals only for scheduled sync
-            includePages: false,
+            includeQueries: true,  // Include queries data
+            includePages: true,    // Include pages data
             includeTotals: true
           });
           
