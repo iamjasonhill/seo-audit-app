@@ -94,6 +94,8 @@ class BingIngestService {
       // Get daily totals from Bing API
       const dailyData = await client.getDailyTotals(siteUrl, startDateStr, endDateStr, searchType);
       
+      logger.info(`Bing API response for ${siteUrl}:`, JSON.stringify(dailyData, null, 2));
+      
       if (!dailyData || dailyData.length === 0) {
         logger.warn(`No Bing data found for ${siteUrl}`);
         await this.updateSyncStatus(siteUrl, searchType, dimension, 'ok', 'No data available');

@@ -96,7 +96,10 @@ class BingApiClient {
   async getDailyTotals(siteUrl, startDate, endDate, searchType = 'web') {
     this.requireKey();
     const url = `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&groupBy=date`;
+    logger.info(`Bing API URL: ${url}`);
     const resp = await axios.get(url);
+    logger.info(`Bing API response status: ${resp.status}`);
+    logger.info(`Bing API response data:`, JSON.stringify(resp.data, null, 2));
     const data = resp.data || {};
     return data.d || [];
   }
