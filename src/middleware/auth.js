@@ -4,7 +4,7 @@ const logger = require('../utils/logger');
 const databaseService = require('../services/database');
 
 // Middleware to check if user is authenticated
-const requireAuth = (req, res, next) => {
+const requireAuth = async (req, res, next) => {
   const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.token;
   
   const fullPath = req.originalUrl || req.url || req.path || '';

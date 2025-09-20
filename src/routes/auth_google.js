@@ -50,14 +50,15 @@ router.get('/callback', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized', message: 'Google account not verified' });
     }
 
-    // Upsert user by email
-    const name = info?.data?.name || null;
-    const picture = info?.data?.picture || null;
-    const user = await databaseService.prisma.user.upsert({
-      where: { email },
-      update: { name, picture },
-      create: { email, name, picture },
-    });
+    // Only allow existing active users; update profile but don't auto-create new ones
+    const existing = await databaseService.prisma.user.findUnique({ where: { email } });
+    if (!existing || existing.status !== 'active') {
+      logger.warn('Login blocked for non-registered or inactive user:', email);
+      return res.status(401).json({ error: 'Unauthorized', message: 'This account is not enabled. Contact the administrator.' });
+    }
+    const name = info?.data?.name || existing.name || null;
+    const picture = info?.data?.picture || existing.picture || null;
+    const user = await databaseService.prisma.user.update({ where: { id: existing.id }, data: { name, picture } });
 
     // Mint JWT for this userId
     const token = jwt.sign(

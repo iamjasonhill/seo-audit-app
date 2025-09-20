@@ -20,6 +20,7 @@ const reportRoutes = require('./src/routes/reports');
 const authRoutes = require('./src/routes/auth');
 const authGoogleRoutes = require('./src/routes/auth_google');
 const gscRoutes = require('./src/routes/gsc');
+const adminRoutes = require('./src/routes/admin');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -63,6 +64,7 @@ app.use('/api/auth/google', authGoogleRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/gsc', gscRateLimiter, gscRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
