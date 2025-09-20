@@ -158,11 +158,13 @@ router.get('/data/:siteUrl', requireAuth, async (req, res) => {
       // Use provided date range
       start = new Date(startDate);
       end = new Date(endDate);
+      logger.info(`Bing data request: ${siteUrl}, startDate: ${startDate}, endDate: ${endDate}, parsed start: ${start}, parsed end: ${end}`);
     } else {
       // Fallback to days-based calculation
       end = new Date();
       start = new Date();
       start.setDate(end.getDate() - parseInt(days));
+      logger.info(`Bing data request: ${siteUrl}, using days: ${days}, calculated start: ${start}, calculated end: ${end}`);
     }
 
     let data = [];
@@ -207,6 +209,7 @@ router.get('/data/:siteUrl', requireAuth, async (req, res) => {
         return res.status(400).json({ error: 'Invalid dataType. Use: totals, queries, or pages' });
     }
 
+    logger.info(`Bing data response: ${dataType}, records: ${data.length}, siteUrl: ${decodeURIComponent(siteUrl)}`);
     res.json({ success: true, data, siteUrl: decodeURIComponent(siteUrl), searchType, days: parseInt(days) });
   } catch (err) {
     logger.error('Bing data fetch error:', err.message);
