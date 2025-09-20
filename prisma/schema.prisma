@@ -236,3 +236,22 @@ model GscSyncLock {
 
   @@map("gsc_sync_lock")
 }
+
+// Bing Webmaster Tools integration (API key based)
+model BingApiKey {
+  userId    Int      @id @map("user_id")
+  apiKey    String   @map("api_key")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bing_api_key")
+}
+
+model BingUserSelection {
+  userId    Int      @id @map("user_id")
+  siteUrl   String   @map("site_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bing_user_selection")
+}

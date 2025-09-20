@@ -104,3 +104,4 @@ temp/
 .env.production
 .env.tmp
 cookies.txt
+.env.vercel
