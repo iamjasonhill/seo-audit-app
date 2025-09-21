@@ -128,7 +128,7 @@ app.listen(PORT, async () => {
   try {
     await databaseService.connect();
     logger.info('Database connection established');
-    if (process.env.SCHEDULER_ENABLED === 'true') {
+    if (process.env.SCHEDULER_ENABLED && process.env.SCHEDULER_ENABLED.toLowerCase().replace(/['"]/g, '') === 'true') {
       try {
         gscScheduler.start(60000);
         logger.info('GSC Scheduler started successfully');
