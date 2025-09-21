@@ -508,76 +508,160 @@ class BingScheduler {
   // Method to process queries and pages for a site (separate from totals)
   async processQueriesAndPages(siteUrl, userId, startDate, endDate) {
     logger.info(`Bing Scheduler: Processing queries and pages for ${siteUrl} (${startDate} to ${endDate})`);
-    
+
     try {
-      const bingApi = await ensureBingApiClient(userId);
-      
-      // Process queries and pages in smaller chunks
+      await ensureBingApiClient(userId);
+
+      const searchType = 'web';
       const chunkSizeDays = 1; // Process 1 day at a time for queries/pages
-      const totalDays = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
+      const baseStartDate = new Date(startDate);
+      const baseEndDate = new Date(endDate);
+      const msPerDay = 24 * 60 * 60 * 1000;
+
+      let resumeDate = new Date(baseStartDate);
+
+      try {
+        const status = await databaseService.prisma.bingSyncStatus.findUnique({
+          where: {
+            siteUrl_searchType_dimension: {
+              siteUrl,
+              searchType,
+              dimension: 'page',
+            },
+          },
+        });
+
+        if (status?.lastSyncedDate) {
+          const nextDay = new Date(status.lastSyncedDate);
+          nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+          if (nextDay > resumeDate) {
+            resumeDate = nextDay;
+          }
+        } else {
+          const latestPage = await databaseService.prisma.bingPagesDaily.findFirst({
+            where: { siteUrl, searchType },
+            select: { date: true },
+            orderBy: { date: 'desc' },
+          });
+
+          if (latestPage?.date) {
+            const nextDay = new Date(latestPage.date);
+            nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+            if (nextDay > resumeDate) {
+              resumeDate = nextDay;
+            }
+          }
+        }
+      } catch (statusError) {
+        logger.warn(`Bing Scheduler: Failed to read pages sync status for ${siteUrl}: ${statusError.message}`);
+      }
+
+      if (resumeDate > baseEndDate) {
+        logger.info(`Bing Scheduler: Pages resume date ${iso(resumeDate)} is beyond end date ${iso(baseEndDate)} for ${siteUrl}, skipping.`);
+        return { processedChunks: 0, totalChunks: 0 };
+      }
+
+      const diffDays = Math.floor((baseEndDate - resumeDate) / msPerDay);
+      if (diffDays < 0) {
+        logger.info(`Bing Scheduler: No queries/pages work needed for ${siteUrl}; resume date ${iso(resumeDate)} beyond ${iso(baseEndDate)}`);
+        return { processedChunks: 0, totalChunks: 0 };
+      }
+
+      const totalDays = diffDays + 1;
       const totalChunks = Math.ceil(totalDays / chunkSizeDays);
       const maxChunksPerRun = 5; // Limit chunks per run for queries/pages
-      
+
       const chunksToProcess = Math.min(totalChunks, maxChunksPerRun);
-      
+
       let processedChunks = 0;
       let consecutiveErrors = 0;
       const maxConsecutiveErrors = 3;
-      
+
       for (let chunk = 0; chunk < chunksToProcess; chunk++) {
-        const chunkStart = new Date(startDate);
-        chunkStart.setDate(new Date(startDate).getDate() + (chunk * chunkSizeDays));
-        
-        const chunkEnd = new Date(chunkStart);
-        chunkEnd.setDate(chunkStart.getDate() + chunkSizeDays - 1);
-        
-        // Don't go beyond the end date
-        if (chunkEnd > new Date(endDate)) {
-          chunkEnd.setTime(new Date(endDate).getTime());
+        const chunkStart = new Date(resumeDate);
+        chunkStart.setUTCDate(resumeDate.getUTCDate() + (chunk * chunkSizeDays));
+
+        if (chunkStart > baseEndDate) {
+          logger.info(`Bing Scheduler: Chunk start ${iso(chunkStart)} beyond end date ${iso(baseEndDate)} for ${siteUrl}, stopping.`);
+          break;
         }
-        
+
+        const chunkEnd = new Date(chunkStart);
+        chunkEnd.setUTCDate(chunkStart.getUTCDate() + chunkSizeDays - 1);
+
+        // Don't go beyond the end date
+        if (chunkEnd > baseEndDate) {
+          chunkEnd.setTime(baseEndDate.getTime());
+        }
+
         logger.info(`Bing Scheduler: Processing queries/pages chunk ${chunk + 1}/${chunksToProcess} for ${siteUrl} (${chunkStart.toISOString().split('T')[0]} to ${chunkEnd.toISOString().split('T')[0]})`);
-        
+
         try {
-          const results = await bingIngest.syncSite(siteUrl, 'web', {
+          const results = await bingIngest.syncSite(siteUrl, searchType, {
             startDate: chunkStart,
             endDate: chunkEnd,
             includeQueries: true,
             includePages: true,
             includeTotals: false // Skip totals as they're already processed
           });
-          
+
           processedChunks++;
           consecutiveErrors = 0;
-          
+
+          const now = new Date();
+          await databaseService.prisma.bingSyncStatus.upsert({
+            where: {
+              siteUrl_searchType_dimension: {
+                siteUrl,
+                searchType,
+                dimension: 'page',
+              },
+            },
+            update: {
+              lastSyncedDate: chunkEnd,
+              lastRunAt: now,
+              status: 'ok',
+              message: null,
+            },
+            create: {
+              siteUrl,
+              searchType,
+              dimension: 'page',
+              lastSyncedDate: chunkEnd,
+              lastRunAt: now,
+              status: 'ok',
+              message: null,
+            },
+          });
+
           logger.info(`Bing Scheduler: Queries/pages chunk ${chunk + 1} completed for ${siteUrl} - Queries: ${results.results?.queries?.recordsProcessed || 0}, Pages: ${results.results?.pages?.recordsProcessed || 0}`);
-          
+
           // Add delay between chunks
           if (chunk < chunksToProcess - 1) {
             const delay = 3000; // 3 seconds between chunks for queries/pages
             logger.info(`Waiting ${delay}ms before processing next queries/pages chunk...`);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
-          
+
         } catch (chunkError) {
           consecutiveErrors++;
           logger.error(`Bing Scheduler: Error in queries/pages chunk ${chunk + 1} for ${siteUrl} (${consecutiveErrors}/${maxConsecutiveErrors} consecutive errors):`, chunkError.message);
-          
+
           if (consecutiveErrors >= maxConsecutiveErrors) {
             logger.error(`Bing Scheduler: Too many consecutive errors (${consecutiveErrors}), stopping queries/pages sync for ${siteUrl}`);
             break;
           }
-          
+
           const backoffDelay = Math.min(1000 * Math.pow(2, consecutiveErrors), 10000);
           logger.info(`Waiting ${backoffDelay}ms before continuing...`);
           await new Promise(resolve => setTimeout(resolve, backoffDelay));
           continue;
         }
       }
-      
+
       logger.info(`Bing Scheduler: Queries/pages processing completed for ${siteUrl} (${processedChunks}/${chunksToProcess} chunks processed)`);
       return { processedChunks, totalChunks: chunksToProcess };
-      
+
     } catch (error) {
       logger.error(`Bing Scheduler: Error processing queries/pages for ${siteUrl}:`, error);
       throw error;
