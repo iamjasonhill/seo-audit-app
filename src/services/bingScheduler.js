@@ -161,7 +161,10 @@ class BingScheduler {
     if (!prop) return; // nothing due
     const { user_id: userId, site_url: siteUrl } = prop;
     logger.info(`Bing Scheduler: processing ${siteUrl} for user ${userId}`);
-    
+
+    // Define startDate and endDate for use throughout the method
+    let startDate, endDate;
+
     try {
       const bingApi = await ensureBingApiClient(userId);
 
@@ -185,14 +188,14 @@ class BingScheduler {
           
           // Create a task to process queries and pages for the last 30 days
           const today = new Date();
-          const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()-2));
-          const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()-30));
-          
-          tasks.push({ 
-            st: 'web', 
-            startDate: iso(start), 
-            endDate: iso(end), 
-            historic: true 
+          endDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()-2));
+          startDate = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()-30));
+
+          tasks.push({
+            st: 'web',
+            startDate: iso(startDate),
+            endDate: iso(endDate),
+            historic: true
           });
         } else {
           // Everything is up to date; schedule next interval
@@ -211,6 +214,10 @@ class BingScheduler {
       const minStart = tasks.reduce((d, t) => d && d < new Date(t.startDate) ? d : new Date(t.startDate), null) || new Date(tasks[0].startDate);
       const maxEnd = tasks.reduce((d, t) => d && d > new Date(t.endDate) ? d : new Date(t.endDate), null) || new Date(tasks[0].endDate);
       const searchTypes = tasks.map(t => t.st);
+
+      // Set startDate and endDate for use in queries/pages processing
+      startDate = minStart;
+      endDate = maxEnd;
 
       // Process in smaller chunks to avoid Vercel timeout limits
       const chunkSizeDays = 2; // Reduced from 7 to 2 days

@@ -562,6 +562,12 @@ class BingIngestService {
       includeTotals = true
     } = options;
 
+    const results = {
+      totals: null,
+      queries: null,
+      pages: null
+    };
+
     logger.info(`Starting full Bing sync for ${siteUrl}`);
 
     try {
