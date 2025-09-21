@@ -368,9 +368,18 @@ router.delete('/sync/unregister', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/bing/scheduler/tick - Manual scheduler tick (for testing)
+// GET /api/bing/scheduler/tick - Manual scheduler tick (for testing and cron jobs)
 router.get('/scheduler/tick', async (req, res) => {
   try {
+    // Allow both cron jobs (no auth) and authenticated requests
+    const isCronJob = req.headers['x-vercel-cron'] === 'true' ||
+                      req.headers['user-agent']?.includes('vercel-cron');
+
+    // If it's not a cron job and no auth, require authentication
+    if (!isCronJob && !req.headers.authorization) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
     await bingScheduler.tick();
     res.json({ success: true, message: 'Bing scheduler tick executed' });
   } catch (err) {
