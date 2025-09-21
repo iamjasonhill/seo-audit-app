@@ -173,15 +173,38 @@ class BingScheduler {
       }
 
       if (tasks.length === 0) {
-        // Up to date; schedule next interval
-        const next = new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000);
-        await databaseService.prisma.$executeRawUnsafe(`
-          UPDATE bing_user_property 
-          SET last_full_sync_at = NOW(), next_sync_due_at = $1, updated_at = NOW()
-          WHERE id = $2
-        `, next, prop.id);
-        logger.info(`Bing Scheduler: ${siteUrl} is up to date, next sync scheduled for ${next.toISOString()}`);
-        return;
+        // Totals are up to date, but check if we need to process queries and pages
+        logger.info(`Bing Scheduler: Totals are up to date for ${siteUrl}, checking if queries/pages processing is needed`);
+        
+        // Check if we have queries and pages data
+        const queriesCount = await databaseService.prisma.bingQueriesDaily.count({ where: { siteUrl } });
+        const pagesCount = await databaseService.prisma.bingPagesDaily.count({ where: { siteUrl } });
+        
+        if (queriesCount === 0 || pagesCount === 0) {
+          logger.info(`Bing Scheduler: Missing queries (${queriesCount}) or pages (${pagesCount}) data for ${siteUrl}, processing needed`);
+          
+          // Create a task to process queries and pages for the last 30 days
+          const today = new Date();
+          const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()-2));
+          const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate()-30));
+          
+          tasks.push({ 
+            st: 'web', 
+            startDate: iso(start), 
+            endDate: iso(end), 
+            historic: true 
+          });
+        } else {
+          // Everything is up to date; schedule next interval
+          const next = new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000);
+          await databaseService.prisma.$executeRawUnsafe(`
+            UPDATE bing_user_property 
+            SET last_full_sync_at = NOW(), next_sync_due_at = $1, updated_at = NOW()
+            WHERE id = $2
+          `, next, prop.id);
+          logger.info(`Bing Scheduler: ${siteUrl} is fully up to date, next sync scheduled for ${next.toISOString()}`);
+          return;
+        }
       }
 
       // Merge to a single window spanning min start/max end across required types
@@ -220,13 +243,17 @@ class BingScheduler {
         
         try {
           // Process only totals first to get basic data quickly
-          const results = await bingIngest.syncSite(siteUrl, 'web', {
-            startDate: chunkStart,
-            endDate: chunkEnd,
-            includeQueries: false, // Skip queries initially
-            includePages: false,   // Skip pages initially
-            includeTotals: true    // Only process totals
-          });
+        // Check if we need to process queries and pages
+        const queriesCount = await databaseService.prisma.bingQueriesDaily.count({ where: { siteUrl } });
+        const pagesCount = await databaseService.prisma.bingPagesDaily.count({ where: { siteUrl } });
+        
+        const results = await bingIngest.syncSite(siteUrl, 'web', {
+          startDate: chunkStart,
+          endDate: chunkEnd,
+          includeQueries: queriesCount === 0, // Process queries if missing
+          includePages: pagesCount === 0,     // Process pages if missing
+          includeTotals: true                 // Always process totals
+        });
           
           processedChunks++;
           consecutiveErrors = 0; // Reset error counter on success
