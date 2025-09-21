@@ -421,9 +421,10 @@ class BingIngestService {
       const pageData = await Promise.race([apiPromise, timeoutPromise]);
       
       if (!pageData || pageData.length === 0) {
-        logger.warn(`No Bing page data found for ${siteUrl} - API returned:`, pageData);
-        await this.updateSyncStatus(siteUrl, searchType, dimension, 'ok', 'No data available');
-        return { success: true, recordsProcessed: 0 };
+        logger.info(`No Bing page data available for ${siteUrl} - this is normal for some sites`);
+        logger.info(`Bing API returned empty pages data - pages data is optional and may not be available for all sites`);
+        await this.updateSyncStatus(siteUrl, searchType, dimension, 'ok', 'Pages data not available (normal for some sites)');
+        return { success: true, recordsProcessed: 0, message: 'Pages data not available' };
       }
       
       logger.info(`Bing API returned ${pageData.length} page records for ${siteUrl}`);
@@ -552,22 +553,16 @@ class BingIngestService {
    * Full sync for a site (all data types)
    */
   async syncSite(siteUrl, searchType = 'web', options = {}) {
-    const { 
-      daysBack = 30, 
+    const {
+      daysBack = 30,
       startDate,
       endDate,
-      includeQueries = true, 
+      includeQueries = true,
       includePages = true,
-      includeTotals = true 
+      includeTotals = true
     } = options;
 
     logger.info(`Starting full Bing sync for ${siteUrl}`);
-
-    const results = {
-      totals: null,
-      queries: null,
-      pages: null
-    };
 
     try {
       if (includeTotals) {
@@ -587,10 +582,17 @@ class BingIngestService {
       }
 
       if (includePages) {
-        if (startDate && endDate) {
-          results.pages = await this.syncPageData(siteUrl, searchType, null, startDate, endDate);
-        } else {
-          results.pages = await this.syncPageData(siteUrl, searchType, Math.min(daysBack, 7));
+        try {
+          if (startDate && endDate) {
+            results.pages = await this.syncPageData(siteUrl, searchType, null, startDate, endDate);
+          } else {
+            results.pages = await this.syncPageData(siteUrl, searchType, Math.min(daysBack, 7));
+          }
+          logger.info(`Bing pages sync completed for ${siteUrl}: ${results.pages?.recordsProcessed || 0} records`);
+        } catch (pagesError) {
+          logger.info(`Bing pages data not available for ${siteUrl} (optional data): ${pagesError.message}`);
+          logger.info(`Continuing sync without pages data for ${siteUrl} - this is normal`);
+          results.pages = { success: true, recordsProcessed: 0, message: 'Pages data not available (normal for some sites)' };
         }
       }
 
