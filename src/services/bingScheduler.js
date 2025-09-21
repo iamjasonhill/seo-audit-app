@@ -189,18 +189,22 @@ class BingScheduler {
       const maxEnd = tasks.reduce((d, t) => d && d > new Date(t.endDate) ? d : new Date(t.endDate), null) || new Date(tasks[0].endDate);
       const searchTypes = tasks.map(t => t.st);
 
-      // Process in weekly chunks to avoid timeouts
-      const chunkSizeDays = 7;
+      // Process in smaller chunks to avoid Vercel timeout limits
+      const chunkSizeDays = 2; // Reduced from 7 to 2 days
       const totalDays = Math.ceil((maxEnd - minStart) / (1000 * 60 * 60 * 24));
       const totalChunks = Math.ceil(totalDays / chunkSizeDays);
       
-      logger.info(`Bing Scheduler: Processing ${totalChunks} weekly chunks for ${siteUrl} (${totalDays} days total)`);
+      logger.info(`Bing Scheduler: Processing ${totalChunks} chunks of ${chunkSizeDays} days each for ${siteUrl} (${totalDays} days total)`);
       
       let processedChunks = 0;
       let consecutiveErrors = 0;
       const maxConsecutiveErrors = 3;
+      const maxChunksPerRun = 10; // Limit chunks per run to avoid timeout
       
-      for (let chunk = 0; chunk < totalChunks; chunk++) {
+      // Limit the number of chunks processed in a single run
+      const chunksToProcess = Math.min(totalChunks, maxChunksPerRun);
+      
+      for (let chunk = 0; chunk < chunksToProcess; chunk++) {
         const chunkStart = new Date(minStart);
         chunkStart.setDate(minStart.getDate() + (chunk * chunkSizeDays));
         
@@ -212,25 +216,26 @@ class BingScheduler {
           chunkEnd.setTime(maxEnd.getTime());
         }
         
-        logger.info(`Bing Scheduler: Processing chunk ${chunk + 1}/${totalChunks} for ${siteUrl} (${iso(chunkStart)} to ${iso(chunkEnd)})`);
+        logger.info(`Bing Scheduler: Processing chunk ${chunk + 1}/${chunksToProcess} for ${siteUrl} (${iso(chunkStart)} to ${iso(chunkEnd)})`);
         
         try {
+          // Process only totals first to get basic data quickly
           const results = await bingIngest.syncSite(siteUrl, 'web', {
             startDate: chunkStart,
             endDate: chunkEnd,
-            includeQueries: true,
-            includePages: true,
-            includeTotals: true
+            includeQueries: false, // Skip queries initially
+            includePages: false,   // Skip pages initially
+            includeTotals: true    // Only process totals
           });
           
           processedChunks++;
           consecutiveErrors = 0; // Reset error counter on success
           
-          logger.info(`Bing Scheduler: Chunk ${chunk + 1} completed for ${siteUrl} - ${JSON.stringify(results.results)}`);
+          logger.info(`Bing Scheduler: Chunk ${chunk + 1} completed for ${siteUrl} - Totals: ${results.results?.totals?.recordsProcessed || 0}`);
           
           // Add delay between chunks to avoid overwhelming the API
-          if (chunk < totalChunks - 1) {
-            const delay = 3000; // 3 seconds between chunks
+          if (chunk < chunksToProcess - 1) {
+            const delay = 2000; // Reduced to 2 seconds between chunks
             logger.info(`Waiting ${delay}ms before processing next chunk...`);
             await new Promise(resolve => setTimeout(resolve, delay));
           }
@@ -255,8 +260,10 @@ class BingScheduler {
         }
       }
 
-      // Check if we're up to date
+      // Check if we're up to date or if we've hit the chunk limit
       let complete = true;
+      let hitChunkLimit = chunksToProcess >= maxChunksPerRun;
+      
       for (const st of SEARCH_TYPES) {
         if (!(await isUpToDate(siteUrl, st))) { 
           complete = false; 
@@ -264,10 +271,21 @@ class BingScheduler {
         }
       }
       
-      // Schedule next sync
-      const next = complete ? 
-        new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000) : 
-        new Date(Date.now() + 5 * 60 * 1000); // 5 minutes if not complete
+      // Schedule next sync based on completion status
+      let next;
+      if (complete) {
+        // Fully up to date - schedule normal interval
+        next = new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000);
+        logger.info(`Bing Scheduler: ${siteUrl} is fully up to date, scheduling normal interval`);
+      } else if (hitChunkLimit) {
+        // Hit chunk limit - schedule quick retry to continue processing
+        next = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
+        logger.info(`Bing Scheduler: ${siteUrl} hit chunk limit (${processedChunks}/${totalChunks} chunks processed), scheduling quick retry`);
+      } else {
+        // Not complete but didn't hit limit - schedule normal retry
+        next = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+        logger.info(`Bing Scheduler: ${siteUrl} not complete (${processedChunks}/${totalChunks} chunks processed), scheduling retry`);
+      }
       
       await databaseService.prisma.$executeRawUnsafe(`
         UPDATE bing_user_property 
@@ -275,7 +293,7 @@ class BingScheduler {
         WHERE id = $2
       `, next, prop.id);
       
-      logger.info(`Bing Scheduler: ${siteUrl} sync complete (${processedChunks}/${totalChunks} chunks processed), next sync scheduled for ${next.toISOString()}`);
+      logger.info(`Bing Scheduler: ${siteUrl} sync session complete (${processedChunks}/${totalChunks} chunks processed), next sync scheduled for ${next.toISOString()}`);
       
     } catch (e) {
       logger.error('Bing Scheduler domain sync error:', e.message);
@@ -435,6 +453,85 @@ class BingScheduler {
       return properties;
     } catch (error) {
       logger.error(`Error getting registered Bing properties:`, error.message);
+      throw error;
+    }
+  }
+
+  // Method to process queries and pages for a site (separate from totals)
+  async processQueriesAndPages(siteUrl, userId, startDate, endDate) {
+    logger.info(`Bing Scheduler: Processing queries and pages for ${siteUrl} (${startDate} to ${endDate})`);
+    
+    try {
+      const bingApi = await ensureBingApiClient(userId);
+      
+      // Process queries and pages in smaller chunks
+      const chunkSizeDays = 1; // Process 1 day at a time for queries/pages
+      const totalDays = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
+      const totalChunks = Math.ceil(totalDays / chunkSizeDays);
+      const maxChunksPerRun = 5; // Limit chunks per run for queries/pages
+      
+      const chunksToProcess = Math.min(totalChunks, maxChunksPerRun);
+      
+      let processedChunks = 0;
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 3;
+      
+      for (let chunk = 0; chunk < chunksToProcess; chunk++) {
+        const chunkStart = new Date(startDate);
+        chunkStart.setDate(new Date(startDate).getDate() + (chunk * chunkSizeDays));
+        
+        const chunkEnd = new Date(chunkStart);
+        chunkEnd.setDate(chunkStart.getDate() + chunkSizeDays - 1);
+        
+        // Don't go beyond the end date
+        if (chunkEnd > new Date(endDate)) {
+          chunkEnd.setTime(new Date(endDate).getTime());
+        }
+        
+        logger.info(`Bing Scheduler: Processing queries/pages chunk ${chunk + 1}/${chunksToProcess} for ${siteUrl} (${iso(chunkStart)} to ${iso(chunkEnd)})`);
+        
+        try {
+          const results = await bingIngest.syncSite(siteUrl, 'web', {
+            startDate: chunkStart,
+            endDate: chunkEnd,
+            includeQueries: true,
+            includePages: true,
+            includeTotals: false // Skip totals as they're already processed
+          });
+          
+          processedChunks++;
+          consecutiveErrors = 0;
+          
+          logger.info(`Bing Scheduler: Queries/pages chunk ${chunk + 1} completed for ${siteUrl} - Queries: ${results.results?.queries?.recordsProcessed || 0}, Pages: ${results.results?.pages?.recordsProcessed || 0}`);
+          
+          // Add delay between chunks
+          if (chunk < chunksToProcess - 1) {
+            const delay = 3000; // 3 seconds between chunks for queries/pages
+            logger.info(`Waiting ${delay}ms before processing next queries/pages chunk...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
+          
+        } catch (chunkError) {
+          consecutiveErrors++;
+          logger.error(`Bing Scheduler: Error in queries/pages chunk ${chunk + 1} for ${siteUrl} (${consecutiveErrors}/${maxConsecutiveErrors} consecutive errors):`, chunkError.message);
+          
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            logger.error(`Bing Scheduler: Too many consecutive errors (${consecutiveErrors}), stopping queries/pages sync for ${siteUrl}`);
+            break;
+          }
+          
+          const backoffDelay = Math.min(1000 * Math.pow(2, consecutiveErrors), 10000);
+          logger.info(`Waiting ${backoffDelay}ms before continuing...`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
+          continue;
+        }
+      }
+      
+      logger.info(`Bing Scheduler: Queries/pages processing completed for ${siteUrl} (${processedChunks}/${chunksToProcess} chunks processed)`);
+      return { processedChunks, totalChunks: chunksToProcess };
+      
+    } catch (error) {
+      logger.error(`Bing Scheduler: Error processing queries/pages for ${siteUrl}:`, error.message);
       throw error;
     }
   }

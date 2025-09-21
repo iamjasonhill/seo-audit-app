@@ -114,8 +114,10 @@ class BingIngestService {
       }
 
       let recordsProcessed = 0;
+      const batchSize = 50; // Process in batches to avoid memory issues
+      const recordsToInsert = [];
 
-      // Process and store each day's data
+      // Process and prepare each day's data for batch insertion
       for (const dayData of dailyData) {
         try {
           // Handle different date formats from Bing API
@@ -153,34 +155,66 @@ class BingIngestService {
           const ctr = parseFloat(dayData.CTR || dayData.ctr || 0);
           const position = parseFloat(dayData.Position || dayData.position || 0);
 
-          await databaseService.prisma.bingTotalsDaily.upsert({
-            where: {
-              siteUrl_date_searchType: {
-                siteUrl,
-                date,
-                searchType
-              }
-            },
-            update: {
-              clicks,
-              impressions,
-              ctr,
-              position
-            },
-            create: {
-              siteUrl,
-              date,
-              searchType,
-              clicks,
-              impressions,
-              ctr,
-              position
-            }
+          recordsToInsert.push({
+            siteUrl,
+            date,
+            searchType,
+            clicks,
+            impressions,
+            ctr,
+            position
           });
 
-          recordsProcessed++;
         } catch (error) {
           logger.error(`Error processing day data for ${siteUrl}:`, error);
+        }
+      }
+
+      // Process records in batches
+      for (let i = 0; i < recordsToInsert.length; i += batchSize) {
+        const batch = recordsToInsert.slice(i, i + batchSize);
+        
+        try {
+          // Use createMany with skipDuplicates for better performance
+          await databaseService.prisma.bingTotalsDaily.createMany({
+            data: batch,
+            skipDuplicates: true
+          });
+          
+          recordsProcessed += batch.length;
+          logger.info(`Bing totals: Processed batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(recordsToInsert.length/batchSize)} (${batch.length} records)`);
+          
+          // Add small delay between batches to avoid overwhelming the database
+          if (i + batchSize < recordsToInsert.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+        } catch (error) {
+          logger.error(`Error inserting batch for ${siteUrl}:`, error);
+          // Fall back to individual upserts for this batch
+          for (const record of batch) {
+            try {
+              await databaseService.prisma.bingTotalsDaily.upsert({
+                where: {
+                  siteUrl_date_searchType: {
+                    siteUrl: record.siteUrl,
+                    date: record.date,
+                    searchType: record.searchType
+                  }
+                },
+                update: {
+                  clicks: record.clicks,
+                  impressions: record.impressions,
+                  ctr: record.ctr,
+                  position: record.position
+                },
+                create: record
+              });
+              recordsProcessed++;
+            } catch (upsertError) {
+              logger.error(`Error upserting individual record for ${siteUrl}:`, upsertError);
+            }
+          }
         }
       }
 
@@ -235,8 +269,10 @@ class BingIngestService {
       }
 
       let recordsProcessed = 0;
+      const batchSize = 50; // Process in batches to avoid memory issues
+      const recordsToInsert = [];
 
-      // Process and store query data
+      // Process and prepare query data for batch insertion
       for (const query of queryData) {
         try {
           // Handle different date formats from Bing API
@@ -275,37 +311,68 @@ class BingIngestService {
           const position = parseFloat(query.Position || query.position || 0);
 
           if (queryText && clicks > 0) { // Only store queries with actual clicks
-            await databaseService.prisma.bingQueriesDaily.upsert({
-              where: {
-                siteUrl_date_searchType_query: {
-                  siteUrl,
-                  date,
-                  searchType,
-                  query: queryText
-                }
-              },
-              update: {
-                clicks,
-                impressions,
-                ctr,
-                position
-              },
-              create: {
-                siteUrl,
-                date,
-                searchType,
-                query: queryText,
-                clicks,
-                impressions,
-                ctr,
-                position
-              }
+            recordsToInsert.push({
+              siteUrl,
+              date,
+              searchType,
+              query: queryText,
+              clicks,
+              impressions,
+              ctr,
+              position
             });
-
-            recordsProcessed++;
           }
         } catch (error) {
           logger.error(`Error processing query data for ${siteUrl}:`, error);
+        }
+      }
+
+      // Process records in batches
+      for (let i = 0; i < recordsToInsert.length; i += batchSize) {
+        const batch = recordsToInsert.slice(i, i + batchSize);
+        
+        try {
+          // Use createMany with skipDuplicates for better performance
+          await databaseService.prisma.bingQueriesDaily.createMany({
+            data: batch,
+            skipDuplicates: true
+          });
+          
+          recordsProcessed += batch.length;
+          logger.info(`Bing queries: Processed batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(recordsToInsert.length/batchSize)} (${batch.length} records)`);
+          
+          // Add small delay between batches to avoid overwhelming the database
+          if (i + batchSize < recordsToInsert.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+        } catch (error) {
+          logger.error(`Error inserting query batch for ${siteUrl}:`, error);
+          // Fall back to individual upserts for this batch
+          for (const record of batch) {
+            try {
+              await databaseService.prisma.bingQueriesDaily.upsert({
+                where: {
+                  siteUrl_date_searchType_query: {
+                    siteUrl: record.siteUrl,
+                    date: record.date,
+                    searchType: record.searchType,
+                    query: record.query
+                  }
+                },
+                update: {
+                  clicks: record.clicks,
+                  impressions: record.impressions,
+                  ctr: record.ctr,
+                  position: record.position
+                },
+                create: record
+              });
+              recordsProcessed++;
+            } catch (upsertError) {
+              logger.error(`Error upserting individual query record for ${siteUrl}:`, upsertError);
+            }
+          }
         }
       }
 
@@ -360,8 +427,10 @@ class BingIngestService {
       }
 
       let recordsProcessed = 0;
+      const batchSize = 50; // Process in batches to avoid memory issues
+      const recordsToInsert = [];
 
-      // Process and store page data
+      // Process and prepare page data for batch insertion
       for (const page of pageData) {
         try {
           // Handle different date formats from Bing API
@@ -400,37 +469,68 @@ class BingIngestService {
           const position = parseFloat(page.Position || page.position || 0);
 
           if (pageUrl && clicks > 0) { // Only store pages with actual clicks
-            await databaseService.prisma.bingPagesDaily.upsert({
-              where: {
-                siteUrl_date_searchType_page: {
-                  siteUrl,
-                  date,
-                  searchType,
-                  page: pageUrl
-                }
-              },
-              update: {
-                clicks,
-                impressions,
-                ctr,
-                position
-              },
-              create: {
-                siteUrl,
-                date,
-                searchType,
-                page: pageUrl,
-                clicks,
-                impressions,
-                ctr,
-                position
-              }
+            recordsToInsert.push({
+              siteUrl,
+              date,
+              searchType,
+              page: pageUrl,
+              clicks,
+              impressions,
+              ctr,
+              position
             });
-
-            recordsProcessed++;
           }
         } catch (error) {
           logger.error(`Error processing page data for ${siteUrl}:`, error);
+        }
+      }
+
+      // Process records in batches
+      for (let i = 0; i < recordsToInsert.length; i += batchSize) {
+        const batch = recordsToInsert.slice(i, i + batchSize);
+        
+        try {
+          // Use createMany with skipDuplicates for better performance
+          await databaseService.prisma.bingPagesDaily.createMany({
+            data: batch,
+            skipDuplicates: true
+          });
+          
+          recordsProcessed += batch.length;
+          logger.info(`Bing pages: Processed batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(recordsToInsert.length/batchSize)} (${batch.length} records)`);
+          
+          // Add small delay between batches to avoid overwhelming the database
+          if (i + batchSize < recordsToInsert.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+        } catch (error) {
+          logger.error(`Error inserting page batch for ${siteUrl}:`, error);
+          // Fall back to individual upserts for this batch
+          for (const record of batch) {
+            try {
+              await databaseService.prisma.bingPagesDaily.upsert({
+                where: {
+                  siteUrl_date_searchType_page: {
+                    siteUrl: record.siteUrl,
+                    date: record.date,
+                    searchType: record.searchType,
+                    page: record.page
+                  }
+                },
+                update: {
+                  clicks: record.clicks,
+                  impressions: record.impressions,
+                  ctr: record.ctr,
+                  position: record.position
+                },
+                create: record
+              });
+              recordsProcessed++;
+            } catch (upsertError) {
+              logger.error(`Error upserting individual page record for ${siteUrl}:`, upsertError);
+            }
+          }
         }
       }
 
