@@ -148,7 +148,7 @@ class BingScheduler {
   async processNextDomain() {
     const prop = await this.findNextDueProperty();
     if (!prop) return; // nothing due
-    const { userId, siteUrl } = prop;
+    const { user_id: userId, site_url: siteUrl } = prop;
     logger.info(`Bing Scheduler: processing ${siteUrl} for user ${userId}`);
     
     try {
