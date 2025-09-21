@@ -8,6 +8,51 @@ const SEARCH_TYPES = ['web']; // Bing primarily uses 'web' search type
 
 function iso(d) { return d.toISOString().slice(0,10); }
 
+async function persistSyncStatus(siteUrl, searchType, options) {
+  const {
+    status,
+    message = null,
+    dimension = 'page',
+    lastSyncedDate,
+    lastRunAt,
+  } = options;
+
+  const now = lastRunAt ?? new Date();
+  const hasLastSyncedDate = Object.prototype.hasOwnProperty.call(options, 'lastSyncedDate');
+
+  const updateData = {
+    lastRunAt: now,
+    status,
+    message,
+  };
+
+  if (hasLastSyncedDate) {
+    updateData.lastSyncedDate = lastSyncedDate;
+  }
+
+  const createData = {
+    siteUrl,
+    searchType,
+    dimension,
+    lastSyncedDate: hasLastSyncedDate ? lastSyncedDate : null,
+    lastRunAt: now,
+    status,
+    message,
+  };
+
+  await databaseService.prisma.bingSyncStatus.upsert({
+    where: {
+      siteUrl_searchType_dimension: {
+        siteUrl,
+        searchType,
+        dimension,
+      },
+    },
+    update: updateData,
+    create: createData,
+  });
+}
+
 async function acquireLock(lockId, ttlMs, who) {
   const now = new Date();
   const until = new Date(now.getTime() + ttlMs);
@@ -608,30 +653,10 @@ class BingScheduler {
           processedChunks++;
           consecutiveErrors = 0;
 
-          const now = new Date();
-          await databaseService.prisma.bingSyncStatus.upsert({
-            where: {
-              siteUrl_searchType_dimension: {
-                siteUrl,
-                searchType,
-                dimension: 'page',
-              },
-            },
-            update: {
-              lastSyncedDate: chunkEnd,
-              lastRunAt: now,
-              status: 'ok',
-              message: null,
-            },
-            create: {
-              siteUrl,
-              searchType,
-              dimension: 'page',
-              lastSyncedDate: chunkEnd,
-              lastRunAt: now,
-              status: 'ok',
-              message: null,
-            },
+          await persistSyncStatus(siteUrl, searchType, {
+            status: 'ok',
+            lastSyncedDate: chunkEnd,
+            message: null,
           });
 
           logger.info(`Bing Scheduler: Queries/pages chunk ${chunk + 1} completed for ${siteUrl} - Queries: ${results.results?.queries?.recordsProcessed || 0}, Pages: ${results.results?.pages?.recordsProcessed || 0}`);
@@ -653,29 +678,15 @@ class BingScheduler {
           }
 
           try {
-            const now = new Date();
-            await databaseService.prisma.bingSyncStatus.upsert({
-              where: {
-                siteUrl_searchType_dimension: {
-                  siteUrl,
-                  searchType,
-                  dimension: 'page',
-                },
-              },
-              update: {
-                lastRunAt: now,
-                status: 'error',
-                message: chunkError.message,
-              },
-              create: {
-                siteUrl,
-                searchType,
-                dimension: 'page',
-                lastSyncedDate: null,
-                lastRunAt: now,
-                status: 'error',
-                message: chunkError.message,
-              },
+            const baseMsg =
+              (chunkError && typeof chunkError.message === 'string')
+                ? chunkError.message
+                : String(chunkError);
+            // Include failing range and cap size to protect DB column
+            const errMessage = (`[${iso(chunkStart)}..${iso(chunkEnd)}] ${baseMsg}`).slice(0, 1024);
+            await persistSyncStatus(siteUrl, searchType, {
+              status: 'error',
+              message: errMessage,
             });
           } catch (statusPersistError) {
             logger.warn(`Bing Scheduler: Failed to persist queries/pages error status for ${siteUrl}: ${statusPersistError.message}`);
