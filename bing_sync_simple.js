@@ -16,10 +16,9 @@ async function fetchBingData(siteUrl, startDate, endDate) {
   const results = {};
 
   try {
-    // Configure axios with proper authentication headers
+    // Configure axios with API key as query parameter (Bing Webmaster API style)
     const config = {
       headers: {
-        'Authorization': `Bearer ${API_KEY}`,
         'Content-Type': 'application/json',
         'User-Agent': 'SEO-Audit-App/1.0'
       },
@@ -38,19 +37,19 @@ async function fetchBingData(siteUrl, startDate, endDate) {
 
         // Fetch totals
         logger.info(`Fetching totals for ${siteUrl} (${startDate} to ${endDate})`);
-        const totalsUrl = `${baseUrl}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
+        const totalsUrl = `${baseUrl}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
         const totalsResponse = await axios.get(totalsUrl, config);
         results.totals = totalsResponse.data.d || [];
 
         // Fetch queries
         logger.info(`Fetching queries for ${siteUrl}`);
-        const queriesUrl = `${baseUrl}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
+        const queriesUrl = `${baseUrl}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
         const queriesResponse = await axios.get(queriesUrl, config);
         results.queries = queriesResponse.data.d || [];
 
         // Fetch pages (handle 404 gracefully)
         logger.info(`Fetching pages for ${siteUrl}`);
-        const pagesUrl = `${baseUrl}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
+        const pagesUrl = `${baseUrl}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
         try {
           const pagesResponse = await axios.get(pagesUrl, config);
           results.pages = pagesResponse.data.d || [];
