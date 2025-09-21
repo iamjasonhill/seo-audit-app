@@ -6,9 +6,9 @@ const logger = require('./src/utils/logger');
 
 // Try multiple possible Bing API endpoints
 const API_ENDPOINTS = [
-  'https://webmasterapi.microsoft.com/api/webmaster/v1.0',
-  'https://ssl.bing.com/webmaster/api.svc/json',
-  'https://api.bing.microsoft.com/webmaster/api.svc/json'
+  'https://api.bing.microsoft.com/v7.0/search/console/sites',
+  'https://api.bing.com/v7.0/search/console/sites',
+  'https://webmaster.bing.com/api/v1/sites'
 ];
 const API_KEY = process.env.BING_API_KEY;
 
@@ -16,7 +16,7 @@ async function fetchBingData(siteUrl, startDate, endDate) {
   const results = {};
 
   try {
-    // Configure axios with API key as query parameter (Bing Webmaster API style)
+    // Configure axios with proper authentication for different API versions
     const config = {
       headers: {
         'Content-Type': 'application/json',
@@ -29,30 +29,52 @@ async function fetchBingData(siteUrl, startDate, endDate) {
       })
     };
 
+    // Add API key to config based on endpoint type
+    if (baseUrl.includes('/v7.0/')) {
+      config.headers['Ocp-Apim-Subscription-Key'] = API_KEY;
+    } else {
+      // Keep API key in query parameter for older endpoints
+    }
+
     // Try each API endpoint until one works
     let lastError = null;
     for (const baseUrl of API_ENDPOINTS) {
       try {
         logger.info(`Trying endpoint: ${baseUrl}`);
 
-        // Fetch totals
+        // Fetch totals - try different URL patterns
         logger.info(`Fetching totals for ${siteUrl} (${startDate} to ${endDate})`);
-        const totalsUrl = `${baseUrl}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
+        let totalsUrl;
+        if (baseUrl.includes('/v7.0/')) {
+          totalsUrl = `${baseUrl}/${encodeURIComponent(siteUrl)}/stats?startDate=${startDate}&endDate=${endDate}`;
+        } else {
+          totalsUrl = `${baseUrl}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
+        }
         const totalsResponse = await axios.get(totalsUrl, config);
-        results.totals = totalsResponse.data.d || [];
+        results.totals = totalsResponse.data.d || totalsResponse.data.value || totalsResponse.data || [];
 
         // Fetch queries
         logger.info(`Fetching queries for ${siteUrl}`);
-        const queriesUrl = `${baseUrl}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
+        let queriesUrl;
+        if (baseUrl.includes('/v7.0/')) {
+          queriesUrl = `${baseUrl}/${encodeURIComponent(siteUrl)}/queries?startDate=${startDate}&endDate=${endDate}`;
+        } else {
+          queriesUrl = `${baseUrl}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
+        }
         const queriesResponse = await axios.get(queriesUrl, config);
-        results.queries = queriesResponse.data.d || [];
+        results.queries = queriesResponse.data.d || queriesResponse.data.value || queriesResponse.data || [];
 
         // Fetch pages (handle 404 gracefully)
         logger.info(`Fetching pages for ${siteUrl}`);
-        const pagesUrl = `${baseUrl}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
+        let pagesUrl;
+        if (baseUrl.includes('/v7.0/')) {
+          pagesUrl = `${baseUrl}/${encodeURIComponent(siteUrl)}/pages?startDate=${startDate}&endDate=${endDate}`;
+        } else {
+          pagesUrl = `${baseUrl}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
+        }
         try {
           const pagesResponse = await axios.get(pagesUrl, config);
-          results.pages = pagesResponse.data.d || [];
+          results.pages = pagesResponse.data.d || pagesResponse.data.value || pagesResponse.data || [];
         } catch (err) {
           if (err.response?.status === 404) {
             logger.warn(`No pages data available for ${siteUrl} (this is normal)`);
