@@ -608,6 +608,60 @@ router.post('/setup-tables', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/bing/monitor/status - Get Bing data status (quick view)
+router.get('/monitor/status', requireAuth, async (req, res) => {
+  try {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    // Run the bing status script
+    const { stdout, stderr } = await execAsync('node bing_status.js');
+    
+    if (stderr) {
+      logger.error('Bing status script error:', stderr);
+    }
+    
+    res.json({
+      success: true,
+      output: stdout || 'No output from status script'
+    });
+  } catch (error) {
+    logger.error('Bing monitor status error:', error);
+    res.status(500).json({ 
+      error: 'BingMonitorStatusError', 
+      message: error.message 
+    });
+  }
+});
+
+// GET /api/bing/monitor/dashboard - Get detailed Bing dashboard
+router.get('/monitor/dashboard', requireAuth, async (req, res) => {
+  try {
+    const { exec } = require('child_process');
+    const { promisify } = require('util');
+    const execAsync = promisify(exec);
+    
+    // Run the bing dashboard script
+    const { stdout, stderr } = await execAsync('node bing_dashboard.js');
+    
+    if (stderr) {
+      logger.error('Bing dashboard script error:', stderr);
+    }
+    
+    res.json({
+      success: true,
+      output: stdout || 'No output from dashboard script'
+    });
+  } catch (error) {
+    logger.error('Bing monitor dashboard error:', error);
+    res.status(500).json({ 
+      error: 'BingMonitorDashboardError', 
+      message: error.message 
+    });
+  }
+});
+
 module.exports = router;
 
 

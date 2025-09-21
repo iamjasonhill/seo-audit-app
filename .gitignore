@@ -105,3 +105,4 @@ temp/
 .env.tmp
 cookies.txt
 .env.vercel
+.env*.local

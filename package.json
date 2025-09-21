@@ -14,7 +14,9 @@
     "db:studio": "prisma studio",
     "db:seed": "node prisma/seed.js",
     "migrate:deploy": "prisma migrate deploy",
-    "build": "prisma generate && npm run start"
+    "build": "prisma generate && npm run start",
+    "bing:dashboard": "node bing_dashboard.js",
+    "bing:status": "node bing_status.js"
   },
   "dependencies": {
     "@prisma/client": "^6.16.1",

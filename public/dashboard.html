@@ -300,6 +300,9 @@
             <a id="adminLink" href="/admin" class="logout-btn" style="background:#6c757d; display:none">
                 <i class="fas fa-shield-alt"></i> Admin
             </a>
+            <a id="bingMonitorLink" href="#" class="logout-btn" style="background:#28a745; display:none" onclick="showBingMonitor()">
+                <i class="fas fa-chart-bar"></i> Bing Monitor
+            </a>
             <span id="userInfo">Loading...</span>
             <button class="logout-btn" id="logoutBtn">
                 <i class="fas fa-sign-out-alt"></i> Logout
@@ -814,6 +817,12 @@
                     try {
                         const adminLink = document.getElementById('adminLink');
                         if (adminLink) adminLink.style.display = (data.user?.role === 'admin') ? 'inline-flex' : 'none';
+                    } catch (_) {}
+                    
+                    // Toggle Bing Monitor link for admin role
+                    try {
+                        const bingMonitorLink = document.getElementById('bingMonitorLink');
+                        if (bingMonitorLink) bingMonitorLink.style.display = (data.user?.role === 'admin') ? 'inline-flex' : 'none';
                     } catch (_) {}
                 } catch (error) {
                     window.location.href = '/login';
@@ -1741,6 +1750,149 @@
                     testBtn.disabled = false;
                     testBtn.innerHTML = orig;
                 }
+            }
+        }
+
+        // Bing Monitor functionality
+        function showBingMonitor() {
+            const modal = document.createElement('div');
+            modal.id = 'bingMonitorModal';
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0,0,0,0.5);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 1000;
+            `;
+            
+            modal.innerHTML = `
+                <div style="
+                    background: white;
+                    border-radius: 10px;
+                    padding: 2rem;
+                    max-width: 90%;
+                    max-height: 90%;
+                    overflow: auto;
+                    position: relative;
+                ">
+                    <div style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 1rem;
+                        border-bottom: 2px solid #e1e5e9;
+                        padding-bottom: 1rem;
+                    ">
+                        <h2 style="margin: 0; color: #333;">
+                            <i class="fas fa-chart-bar"></i> Bing Data Monitor
+                        </h2>
+                        <button onclick="closeBingMonitor()" style="
+                            background: #dc3545;
+                            color: white;
+                            border: none;
+                            border-radius: 5px;
+                            padding: 0.5rem 1rem;
+                            cursor: pointer;
+                        ">
+                            <i class="fas fa-times"></i> Close
+                        </button>
+                    </div>
+                    <div id="bingMonitorContent" style="
+                        font-family: 'Courier New', monospace;
+                        background: #f8f9fa;
+                        padding: 1rem;
+                        border-radius: 5px;
+                        white-space: pre-wrap;
+                        max-height: 60vh;
+                        overflow: auto;
+                    ">
+                        <i class="fas fa-spinner fa-spin"></i> Loading Bing data status...
+                    </div>
+                    <div style="margin-top: 1rem; text-align: center;">
+                        <button onclick="refreshBingMonitor()" style="
+                            background: #28a745;
+                            color: white;
+                            border: none;
+                            border-radius: 5px;
+                            padding: 0.5rem 1rem;
+                            cursor: pointer;
+                            margin-right: 0.5rem;
+                        ">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button onclick="showDetailedBingMonitor()" style="
+                            background: #007bff;
+                            color: white;
+                            border: none;
+                            border-radius: 5px;
+                            padding: 0.5rem 1rem;
+                            cursor: pointer;
+                        ">
+                            <i class="fas fa-chart-line"></i> Detailed View
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            loadBingMonitorData();
+        }
+        
+        function closeBingMonitor() {
+            const modal = document.getElementById('bingMonitorModal');
+            if (modal) {
+                modal.remove();
+            }
+        }
+        
+        async function loadBingMonitorData() {
+            const content = document.getElementById('bingMonitorContent');
+            if (!content) return;
+            
+            try {
+                const response = await fetch('/api/bing/monitor/status', { credentials: 'include' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    content.textContent = data.output;
+                } else {
+                    content.textContent = `Error: ${data.message}`;
+                }
+            } catch (error) {
+                content.textContent = `Error loading data: ${error.message}`;
+            }
+        }
+        
+        async function refreshBingMonitor() {
+            const content = document.getElementById('bingMonitorContent');
+            if (!content) return;
+            
+            content.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+            await loadBingMonitorData();
+        }
+        
+        async function showDetailedBingMonitor() {
+            const content = document.getElementById('bingMonitorContent');
+            if (!content) return;
+            
+            content.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading detailed dashboard...';
+            
+            try {
+                const response = await fetch('/api/bing/monitor/dashboard', { credentials: 'include' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    content.textContent = data.output;
+                } else {
+                    content.textContent = `Error: ${data.message}`;
+                }
+            } catch (error) {
+                content.textContent = `Error loading detailed data: ${error.message}`;
             }
         }
 
