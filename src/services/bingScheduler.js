@@ -652,6 +652,35 @@ class BingScheduler {
             break;
           }
 
+          try {
+            const now = new Date();
+            await databaseService.prisma.bingSyncStatus.upsert({
+              where: {
+                siteUrl_searchType_dimension: {
+                  siteUrl,
+                  searchType,
+                  dimension: 'page',
+                },
+              },
+              update: {
+                lastRunAt: now,
+                status: 'error',
+                message: chunkError.message,
+              },
+              create: {
+                siteUrl,
+                searchType,
+                dimension: 'page',
+                lastSyncedDate: null,
+                lastRunAt: now,
+                status: 'error',
+                message: chunkError.message,
+              },
+            });
+          } catch (statusPersistError) {
+            logger.warn(`Bing Scheduler: Failed to persist queries/pages error status for ${siteUrl}: ${statusPersistError.message}`);
+          }
+
           const backoffDelay = Math.min(1000 * Math.pow(2, consecutiveErrors), 10000);
           logger.info(`Waiting ${backoffDelay}ms before continuing...`);
           await new Promise(resolve => setTimeout(resolve, backoffDelay));
