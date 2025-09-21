@@ -502,7 +502,7 @@ class BingScheduler {
           chunkEnd.setTime(new Date(endDate).getTime());
         }
         
-        logger.info(`Bing Scheduler: Processing queries/pages chunk ${chunk + 1}/${chunksToProcess} for ${siteUrl} (${iso(chunkStart)} to ${iso(chunkEnd)})`);
+        logger.info(`Bing Scheduler: Processing queries/pages chunk ${chunk + 1}/${chunksToProcess} for ${siteUrl} (${chunkStart.toISOString().split('T')[0]} to ${chunkEnd.toISOString().split('T')[0]})`);
         
         try {
           const results = await bingIngest.syncSite(siteUrl, 'web', {
