@@ -137,10 +137,12 @@ app.listen(PORT, async () => {
       }
       
       try {
+        logger.info('Attempting to start Bing Scheduler...');
         bingScheduler.start(300000); // 5 minutes for Bing
         logger.info('Bing Scheduler started successfully');
       } catch (error) {
         logger.error('Failed to start Bing scheduler:', error);
+        logger.error('Bing scheduler error details:', error.stack);
       }
       
       logger.info('Scheduler initialization complete');

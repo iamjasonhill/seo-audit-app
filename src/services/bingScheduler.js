@@ -108,11 +108,22 @@ class BingScheduler {
   }
 
   start(intervalMs = 300000) { // 5 minutes default interval
-    if (this.timer) return;
-    logger.info('Bing Scheduler starting');
-    this.timer = setInterval(() => this.tick().catch(e => logger.error('Bing scheduler tick error:', e.message)), intervalMs);
-    // kick immediately
-    this.tick().catch(e => logger.error('Bing scheduler initial tick error:', e.message));
+    if (this.timer) {
+      logger.info('Bing Scheduler already running, skipping start');
+      return;
+    }
+    logger.info('Bing Scheduler starting with interval:', intervalMs);
+    try {
+      this.timer = setInterval(() => this.tick().catch(e => logger.error('Bing scheduler tick error:', e.message)), intervalMs);
+      logger.info('Bing Scheduler timer set successfully');
+      // kick immediately
+      logger.info('Bing Scheduler executing initial tick...');
+      this.tick().catch(e => logger.error('Bing scheduler initial tick error:', e.message));
+      logger.info('Bing Scheduler start method completed');
+    } catch (error) {
+      logger.error('Error in Bing Scheduler start method:', error);
+      throw error;
+    }
   }
 
   stop() {
