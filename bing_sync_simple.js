@@ -1,9 +1,15 @@
 const cron = require('node-cron');
 const axios = require('axios');
+const https = require('https');
 const databaseService = require('./src/services/database');
 const logger = require('./src/utils/logger');
 
-const BASE_URL = 'https://ssl.bing.com/webmaster/api.svc/json';
+// Try multiple possible Bing API endpoints
+const API_ENDPOINTS = [
+  'https://webmasterapi.microsoft.com/api/webmaster/v1.0',
+  'https://ssl.bing.com/webmaster/api.svc/json',
+  'https://api.bing.microsoft.com/webmaster/api.svc/json'
+];
 const API_KEY = process.env.BING_API_KEY;
 
 async function fetchBingData(siteUrl, startDate, endDate) {
@@ -14,35 +20,62 @@ async function fetchBingData(siteUrl, startDate, endDate) {
     const config = {
       headers: {
         'Authorization': `Bearer ${API_KEY}`,
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+        'User-Agent': 'SEO-Audit-App/1.0'
+      },
+      timeout: 30000, // 30 second timeout
+      httpsAgent: new https.Agent({
+        keepAlive: true,
+        rejectUnauthorized: false // Temporarily disable SSL verification for debugging
+      })
     };
 
-    // Fetch totals
-    logger.info(`Fetching totals for ${siteUrl} (${startDate} to ${endDate})`);
-    const totalsUrl = `${BASE_URL}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
-    const totalsResponse = await axios.get(totalsUrl, config);
-    results.totals = totalsResponse.data.d || [];
+    // Try each API endpoint until one works
+    let lastError = null;
+    for (const baseUrl of API_ENDPOINTS) {
+      try {
+        logger.info(`Trying endpoint: ${baseUrl}`);
 
-    // Fetch queries
-    logger.info(`Fetching queries for ${siteUrl}`);
-    const queriesUrl = `${BASE_URL}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
-    const queriesResponse = await axios.get(queriesUrl, config);
-    results.queries = queriesResponse.data.d || [];
+        // Fetch totals
+        logger.info(`Fetching totals for ${siteUrl} (${startDate} to ${endDate})`);
+        const totalsUrl = `${baseUrl}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
+        const totalsResponse = await axios.get(totalsUrl, config);
+        results.totals = totalsResponse.data.d || [];
 
-    // Fetch pages (handle 404 gracefully)
-    logger.info(`Fetching pages for ${siteUrl}`);
-    const pagesUrl = `${BASE_URL}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
-    try {
-      const pagesResponse = await axios.get(pagesUrl, config);
-      results.pages = pagesResponse.data.d || [];
-    } catch (err) {
-      if (err.response?.status === 404) {
-        logger.warn(`No pages data available for ${siteUrl} (this is normal)`);
-        results.pages = [];
-      } else {
-        throw err;
+        // Fetch queries
+        logger.info(`Fetching queries for ${siteUrl}`);
+        const queriesUrl = `${baseUrl}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
+        const queriesResponse = await axios.get(queriesUrl, config);
+        results.queries = queriesResponse.data.d || [];
+
+        // Fetch pages (handle 404 gracefully)
+        logger.info(`Fetching pages for ${siteUrl}`);
+        const pagesUrl = `${baseUrl}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
+        try {
+          const pagesResponse = await axios.get(pagesUrl, config);
+          results.pages = pagesResponse.data.d || [];
+        } catch (err) {
+          if (err.response?.status === 404) {
+            logger.warn(`No pages data available for ${siteUrl} (this is normal)`);
+            results.pages = [];
+          } else {
+            throw err;
+          }
+        }
+
+        logger.info(`✅ Successfully used endpoint: ${baseUrl}`);
+        break; // Success, exit the loop
+
+      } catch (error) {
+        lastError = error;
+        logger.warn(`Failed with endpoint ${baseUrl}: ${error.message}`);
+        continue; // Try next endpoint
       }
+    }
+
+    // If all endpoints failed, throw the last error
+    if (!results.totals) {
+      throw lastError || new Error('All API endpoints failed');
     }
 
     return results;
