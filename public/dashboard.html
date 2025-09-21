@@ -300,7 +300,7 @@
             <a id="adminLink" href="/admin" class="logout-btn" style="background:#6c757d; display:none">
                 <i class="fas fa-shield-alt"></i> Admin
             </a>
-            <a id="bingMonitorLink" href="#" class="logout-btn" style="background:#28a745; display:none" onclick="showBingMonitor()">
+            <a id="bingMonitorLink" href="#" class="logout-btn" style="background:#28a745; display:none">
                 <i class="fas fa-chart-bar"></i> Bing Monitor
             </a>
             <span id="userInfo">Loading...</span>
@@ -822,7 +822,14 @@
                     // Toggle Bing Monitor link for admin role
                     try {
                         const bingMonitorLink = document.getElementById('bingMonitorLink');
-                        if (bingMonitorLink) bingMonitorLink.style.display = (data.user?.role === 'admin') ? 'inline-flex' : 'none';
+                        if (bingMonitorLink) {
+                            bingMonitorLink.style.display = (data.user?.role === 'admin') ? 'inline-flex' : 'none';
+                            // Add event listener for Bing Monitor link
+                            bingMonitorLink.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                showBingMonitor();
+                            });
+                        }
                     } catch (_) {}
                 } catch (error) {
                     window.location.href = '/login';
@@ -1791,7 +1798,7 @@
                         <h2 style="margin: 0; color: #333;">
                             <i class="fas fa-chart-bar"></i> Bing Data Monitor
                         </h2>
-                        <button onclick="closeBingMonitor()" style="
+                        <button id="bingMonitorCloseBtn" style="
                             background: #dc3545;
                             color: white;
                             border: none;
@@ -1814,7 +1821,7 @@
                         <i class="fas fa-spinner fa-spin"></i> Loading Bing data status...
                     </div>
                     <div style="margin-top: 1rem; text-align: center;">
-                        <button onclick="refreshBingMonitor()" style="
+                        <button id="bingMonitorRefreshBtn" style="
                             background: #28a745;
                             color: white;
                             border: none;
@@ -1825,7 +1832,7 @@
                         ">
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
-                        <button onclick="showDetailedBingMonitor()" style="
+                        <button id="bingMonitorDetailedBtn" style="
                             background: #007bff;
                             color: white;
                             border: none;
@@ -1840,6 +1847,22 @@
             `;
             
             document.body.appendChild(modal);
+            
+            // Add event listeners
+            const closeBtn = document.getElementById('bingMonitorCloseBtn');
+            const refreshBtn = document.getElementById('bingMonitorRefreshBtn');
+            const detailedBtn = document.getElementById('bingMonitorDetailedBtn');
+            
+            if (closeBtn) {
+                closeBtn.addEventListener('click', closeBingMonitor);
+            }
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', refreshBingMonitor);
+            }
+            if (detailedBtn) {
+                detailedBtn.addEventListener('click', showDetailedBingMonitor);
+            }
+            
             loadBingMonitorData();
         }
         
