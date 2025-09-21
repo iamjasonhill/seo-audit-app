@@ -611,20 +611,75 @@ router.post('/setup-tables', requireAuth, async (req, res) => {
 // GET /api/bing/monitor/status - Get Bing data status (quick view)
 router.get('/monitor/status', requireAuth, async (req, res) => {
   try {
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const execAsync = promisify(exec);
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
     
-    // Run the bing status script
-    const { stdout, stderr } = await execAsync('node bing_status.js');
+    let output = '';
+    output += '🔍 BING DATA STATUS - ' + new Date().toLocaleString() + '\n';
+    output += '='.repeat(50) + '\n';
     
-    if (stderr) {
-      logger.error('Bing status script error:', stderr);
+    // Quick summary
+    const totalTotals = await prisma.bingTotalsDaily.count();
+    const totalQueries = await prisma.bingQueriesDaily.count();
+    const totalPages = await prisma.bingPagesDaily.count();
+    
+    output += `📊 Records: ${totalTotals} totals, ${totalQueries} queries, ${totalPages} pages\n`;
+    
+    if (totalTotals === 0) {
+      output += '❌ No data collected yet\n';
+      output += '💡 Register properties and start data collection\n';
+    } else {
+      // Get properties with data
+      const properties = await prisma.$queryRaw`
+        SELECT 
+          site_url,
+          COUNT(DISTINCT date) as days,
+          MIN(date) as earliest,
+          MAX(date) as latest,
+          SUM(clicks) as clicks,
+          SUM(impressions) as impressions
+        FROM bing_totals_daily 
+        GROUP BY site_url 
+        ORDER BY days DESC
+      `;
+      
+      output += `\n🌐 Properties (${properties.length}):\n`;
+      properties.forEach((prop, i) => {
+        const daysAgo = Math.floor((new Date() - new Date(prop.latest)) / (1000 * 60 * 60 * 24));
+        const freshness = daysAgo <= 2 ? '✅' : daysAgo <= 7 ? '⚠️' : '❌';
+        
+        output += `${i + 1}. ${prop.site_url}\n`;
+        output += `   📅 ${prop.earliest.toISOString().split('T')[0]} to ${prop.latest.toISOString().split('T')[0]} (${prop.days} days)\n`;
+        output += `   📈 ${prop.clicks.toLocaleString()} clicks, ${prop.impressions.toLocaleString()} impressions\n`;
+        output += `   ${freshness} ${daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : daysAgo + ' days ago'}\n`;
+      });
+      
+      // Data growth check
+      const recentData = await prisma.bingTotalsDaily.findMany({
+        where: {
+          date: {
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+          }
+        },
+        orderBy: { date: 'desc' },
+        take: 5
+      });
+      
+      if (recentData.length > 0) {
+        output += `\n📈 Recent Activity (last 7 days):\n`;
+        recentData.forEach(record => {
+          output += `   ${record.date.toISOString().split('T')[0]}: ${record.siteUrl} - ${record.clicks} clicks\n`;
+        });
+      } else {
+        output += `\n⚠️  No recent activity (last 7 days)\n`;
+      }
     }
+    
+    await prisma.$disconnect();
     
     res.json({
       success: true,
-      output: stdout || 'No output from status script'
+      output: output
     });
   } catch (error) {
     logger.error('Bing monitor status error:', error);
@@ -638,20 +693,125 @@ router.get('/monitor/status', requireAuth, async (req, res) => {
 // GET /api/bing/monitor/dashboard - Get detailed Bing dashboard
 router.get('/monitor/dashboard', requireAuth, async (req, res) => {
   try {
-    const { exec } = require('child_process');
-    const { promisify } = require('util');
-    const execAsync = promisify(exec);
+    const { PrismaClient } = require('@prisma/client');
+    const prisma = new PrismaClient();
     
-    // Run the bing dashboard script
-    const { stdout, stderr } = await execAsync('node bing_dashboard.js');
+    let output = '';
+    output += '🔍 BING WEBMASTER TOOLS DATA DASHBOARD\n';
+    output += '='.repeat(60) + '\n';
+    output += `📅 Generated: ${new Date().toLocaleString()}\n\n`;
     
-    if (stderr) {
-      logger.error('Bing dashboard script error:', stderr);
+    // Get all Bing properties with data
+    output += '📊 BING PROPERTIES WITH DATA:\n';
+    output += '-'.repeat(60) + '\n';
+    
+    const propertiesWithData = await prisma.$queryRaw`
+      SELECT 
+        site_url,
+        COUNT(DISTINCT date) as total_days,
+        MIN(date) as earliest_date,
+        MAX(date) as latest_date,
+        SUM(clicks) as total_clicks,
+        SUM(impressions) as total_impressions,
+        AVG(ctr) as avg_ctr,
+        AVG(position) as avg_position
+      FROM bing_totals_daily 
+      GROUP BY site_url 
+      ORDER BY total_days DESC, total_clicks DESC
+    `;
+    
+    if (propertiesWithData.length === 0) {
+      output += '❌ No Bing properties found with data\n';
+      output += '💡 Properties need to be registered and data collection started\n\n';
+    } else {
+      propertiesWithData.forEach((prop, index) => {
+        output += `${index + 1}. 🌐 ${prop.site_url}\n`;
+        output += `   📅 Date Range: ${prop.earliest_date.toISOString().split('T')[0]} to ${prop.latest_date.toISOString().split('T')[0]}\n`;
+        output += `   📊 Total Days: ${prop.total_days}\n`;
+        output += `   📈 Total Clicks: ${prop.total_clicks.toLocaleString()}\n`;
+        output += `   👁️  Total Impressions: ${prop.total_impressions.toLocaleString()}\n`;
+        output += `   📊 Avg CTR: ${(prop.avg_ctr * 100).toFixed(2)}%\n`;
+        output += `   🎯 Avg Position: ${prop.avg_position.toFixed(1)}\n\n`;
+      });
     }
+    
+    // Summary statistics
+    output += '📊 OVERALL SUMMARY:\n';
+    output += '='.repeat(60) + '\n';
+    
+    const totalTotals = await prisma.bingTotalsDaily.count();
+    const totalQueries = await prisma.bingQueriesDaily.count();
+    const totalPages = await prisma.bingPagesDaily.count();
+    const totalSyncStatus = await prisma.bingSyncStatus.count();
+    
+    output += `📈 Total Records:\n`;
+    output += `   📊 Totals: ${totalTotals.toLocaleString()}\n`;
+    output += `   🔍 Queries: ${totalQueries.toLocaleString()}\n`;
+    output += `   📄 Pages: ${totalPages.toLocaleString()}\n`;
+    output += `   📊 Sync Status: ${totalSyncStatus.toLocaleString()}\n`;
+    
+    // Check registered properties
+    try {
+      const registeredProperties = await prisma.$queryRaw`
+        SELECT COUNT(*) as count FROM bing_user_property
+      `;
+      output += `\n🏢 Registered Properties: ${registeredProperties[0].count}\n`;
+    } catch (error) {
+      output += `\n🏢 Registered Properties: ❌ Table not accessible\n`;
+    }
+    
+    // Check API keys
+    try {
+      const apiKeys = await prisma.$queryRaw`
+        SELECT COUNT(*) as count FROM bing_api_key
+      `;
+      output += `🔑 API Keys Configured: ${apiKeys[0].count}\n`;
+    } catch (error) {
+      output += `🔑 API Keys Configured: ❌ Table not accessible\n`;
+    }
+    
+    // Data growth indicators
+    if (totalTotals > 0) {
+      output += `\n📈 DATA GROWTH INDICATORS:\n`;
+      
+      // Check if data is recent
+      const recentData = await prisma.bingTotalsDaily.findMany({
+        where: {
+          date: {
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
+          }
+        },
+        orderBy: { date: 'desc' },
+        take: 1
+      });
+      
+      if (recentData.length > 0) {
+        output += `✅ Recent Activity: Data from ${recentData[0].date.toISOString().split('T')[0]}\n`;
+      } else {
+        output += `⚠️  No Recent Activity: No data in last 7 days\n`;
+      }
+      
+      // Check data completeness
+      const allDates = await prisma.$queryRaw`
+        SELECT DISTINCT date FROM bing_totals_daily ORDER BY date DESC LIMIT 10
+      `;
+      
+      if (allDates.length > 0) {
+        output += `📅 Latest Data Dates:\n`;
+        allDates.forEach((record, index) => {
+          output += `   ${index + 1}. ${record.date.toISOString().split('T')[0]}\n`;
+        });
+      }
+    }
+    
+    output += '\n' + '='.repeat(60) + '\n';
+    output += '💡 TIP: Run this monitor regularly to track data growth!\n';
+    
+    await prisma.$disconnect();
     
     res.json({
       success: true,
-      output: stdout || 'No output from dashboard script'
+      output: output
     });
   } catch (error) {
     logger.error('Bing monitor dashboard error:', error);
