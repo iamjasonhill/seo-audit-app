@@ -42,17 +42,8 @@ async function fetchBingData(siteUrl, startDate, endDate) {
       logger.info(`Fetching pages for ${siteUrl}`);
       const pagesUrl = `${BASE_URL}/PageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&aggregation=day&apikey=${API_KEY}`;
       logger.info(`Pages URL: ${pagesUrl}`);
-      try {
-        const pagesResponse = await axios.get(pagesUrl, config);
-        results.pages = pagesResponse.data || [];
-      } catch (err) {
-        if (err.response?.status === 404) {
-          logger.warn(`No pages data available for ${siteUrl} (this is normal)`);
-          results.pages = [];
-        } else {
-          throw err;
-        }
-      }
+      const pagesResponse = await axios.get(pagesUrl, config);
+      results.pages = pagesResponse.data || [];
 
       logger.info(`✅ Successfully fetched data for ${siteUrl}`);
       return results;
@@ -67,10 +58,7 @@ async function fetchBingData(siteUrl, startDate, endDate) {
       });
       throw error;
     }
-
-
-    return results;
-}
+  }
 
 async function storeBingData(siteUrl, startDate, endDate, data) {
   const searchType = 'web';
