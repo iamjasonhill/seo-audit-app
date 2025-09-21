@@ -465,14 +465,32 @@ class BingIngestService {
             continue;
           }
           
-          // Bing API returns pages data in Query field (contains page URL)
-          const pageUrl = page.Query || page.query || page.Page || page.page || '';
+          // Bing API responses aren't consistent about where the landing page URL lives.
+          // We've observed the URL being returned as Query, Page, Url, PageUrl and even
+          // nested objects when the response contains additional metadata. Normalise the
+          // value so we always persist the canonical landing page string.
+          const rawPageUrl =
+            page.Query ||
+            page.query ||
+            page.Page ||
+            page.page ||
+            page.Url ||
+            page.url ||
+            page.PageUrl ||
+            page.pageUrl ||
+            (typeof page === 'object' && page !== null && page.PageUrl ? page.PageUrl.Url || page.PageUrl.url : null) ||
+            (typeof page === 'object' && page !== null && page.Page ? page.Page.Url || page.Page.url : null) ||
+            '';
+
+          const pageUrl = typeof rawPageUrl === 'string'
+            ? rawPageUrl.trim()
+            : (rawPageUrl && rawPageUrl.toString ? rawPageUrl.toString().trim() : '');
           const clicks = parseInt(page.Clicks || page.clicks || 0);
           const impressions = parseInt(page.Impressions || page.impressions || 0);
           const ctr = parseFloat(page.CTR || page.ctr || page.AvgClickPosition || page.avgClickPosition || 0);
           const position = parseFloat(page.Position || page.position || page.AvgImpressionPosition || page.avgImpressionPosition || 0);
 
-          if (pageUrl) { // Store all pages with URLs, regardless of clicks
+          if (pageUrl && pageUrl !== 'undefined' && pageUrl !== 'null') { // Store all pages with URLs, regardless of clicks
             recordsToInsert.push({
               siteUrl,
               date,
