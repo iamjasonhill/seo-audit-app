@@ -4,107 +4,72 @@ const https = require('https');
 const databaseService = require('./src/services/database');
 const logger = require('./src/utils/logger');
 
-// Try multiple possible Bing API endpoints
-const API_ENDPOINTS = [
-  'https://api.bing.microsoft.com/v7.0/search/console/sites',
-  'https://api.bing.com/v7.0/search/console/sites',
-  'https://webmaster.bing.com/api/v1/sites'
-];
+// Use correct Bing Webmaster API v7.0 endpoint
+const BASE_URL = 'https://api.bing.microsoft.com/v7.0/Webmaster';
 const API_KEY = process.env.BING_API_KEY;
 
 async function fetchBingData(siteUrl, startDate, endDate) {
   const results = {};
 
   try {
-    // Configure axios with proper authentication for different API versions
+    // Configure axios for v7.0 API
     const config = {
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'SEO-Audit-App/1.0'
       },
-      timeout: 30000, // 30 second timeout
-      httpsAgent: new https.Agent({
-        keepAlive: true,
-        rejectUnauthorized: false // Temporarily disable SSL verification for debugging
-      })
+      timeout: 30000
     };
 
-    // Add API key to config based on endpoint type
-    if (baseUrl.includes('/v7.0/')) {
-      config.headers['Ocp-Apim-Subscription-Key'] = API_KEY;
-    } else {
-      // Keep API key in query parameter for older endpoints
-    }
+    try {
+      logger.info(`Fetching Bing data for ${siteUrl} (${startDate} to ${endDate})`);
 
-    // Try each API endpoint until one works
-    let lastError = null;
-    for (const baseUrl of API_ENDPOINTS) {
+      // Fetch totals using v7.0 API
+      logger.info(`Fetching totals for ${siteUrl}`);
+      const totalsUrl = `${BASE_URL}/QueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&aggregation=day&apikey=${API_KEY}`;
+      logger.info(`Totals URL: ${totalsUrl}`);
+      const totalsResponse = await axios.get(totalsUrl, config);
+      results.totals = totalsResponse.data || [];
+
+      // Fetch queries using v7.0 API
+      logger.info(`Fetching queries for ${siteUrl}`);
+      const queriesUrl = `${BASE_URL}/QueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&aggregation=day&apikey=${API_KEY}`;
+      logger.info(`Queries URL: ${queriesUrl}`);
+      const queriesResponse = await axios.get(queriesUrl, config);
+      results.queries = queriesResponse.data || [];
+
+      // Fetch pages using v7.0 API (handle 404 gracefully)
+      logger.info(`Fetching pages for ${siteUrl}`);
+      const pagesUrl = `${BASE_URL}/PageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&aggregation=day&apikey=${API_KEY}`;
+      logger.info(`Pages URL: ${pagesUrl}`);
       try {
-        logger.info(`Trying endpoint: ${baseUrl}`);
-
-        // Fetch totals - try different URL patterns
-        logger.info(`Fetching totals for ${siteUrl} (${startDate} to ${endDate})`);
-        let totalsUrl;
-        if (baseUrl.includes('/v7.0/')) {
-          totalsUrl = `${baseUrl}/${encodeURIComponent(siteUrl)}/stats?startDate=${startDate}&endDate=${endDate}`;
+        const pagesResponse = await axios.get(pagesUrl, config);
+        results.pages = pagesResponse.data || [];
+      } catch (err) {
+        if (err.response?.status === 404) {
+          logger.warn(`No pages data available for ${siteUrl} (this is normal)`);
+          results.pages = [];
         } else {
-          totalsUrl = `${baseUrl}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
+          throw err;
         }
-        const totalsResponse = await axios.get(totalsUrl, config);
-        results.totals = totalsResponse.data.d || totalsResponse.data.value || totalsResponse.data || [];
-
-        // Fetch queries
-        logger.info(`Fetching queries for ${siteUrl}`);
-        let queriesUrl;
-        if (baseUrl.includes('/v7.0/')) {
-          queriesUrl = `${baseUrl}/${encodeURIComponent(siteUrl)}/queries?startDate=${startDate}&endDate=${endDate}`;
-        } else {
-          queriesUrl = `${baseUrl}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
-        }
-        const queriesResponse = await axios.get(queriesUrl, config);
-        results.queries = queriesResponse.data.d || queriesResponse.data.value || queriesResponse.data || [];
-
-        // Fetch pages (handle 404 gracefully)
-        logger.info(`Fetching pages for ${siteUrl}`);
-        let pagesUrl;
-        if (baseUrl.includes('/v7.0/')) {
-          pagesUrl = `${baseUrl}/${encodeURIComponent(siteUrl)}/pages?startDate=${startDate}&endDate=${endDate}`;
-        } else {
-          pagesUrl = `${baseUrl}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
-        }
-        try {
-          const pagesResponse = await axios.get(pagesUrl, config);
-          results.pages = pagesResponse.data.d || pagesResponse.data.value || pagesResponse.data || [];
-        } catch (err) {
-          if (err.response?.status === 404) {
-            logger.warn(`No pages data available for ${siteUrl} (this is normal)`);
-            results.pages = [];
-          } else {
-            throw err;
-          }
-        }
-
-        logger.info(`✅ Successfully used endpoint: ${baseUrl}`);
-        break; // Success, exit the loop
-
-      } catch (error) {
-        lastError = error;
-        logger.warn(`Failed with endpoint ${baseUrl}: ${error.message}`);
-        continue; // Try next endpoint
       }
+
+      logger.info(`✅ Successfully fetched data for ${siteUrl}`);
+      return results;
+
+    } catch (error) {
+      logger.error(`❌ Failed to fetch Bing data for ${siteUrl}`);
+      logger.error(`Error details:`, {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+        config: error.config
+      });
+      throw error;
     }
 
-    // If all endpoints failed, throw the last error
-    if (!results.totals) {
-      throw lastError || new Error('All API endpoints failed');
-    }
 
     return results;
-  } catch (error) {
-    logger.error(`Error fetching Bing data for ${siteUrl}:`, error.message);
-    logger.error(`Error details:`, error.response?.data || error.message);
-    throw error;
-  }
 }
 
 async function storeBingData(siteUrl, startDate, endDate, data) {
