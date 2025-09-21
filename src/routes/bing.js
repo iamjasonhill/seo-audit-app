@@ -644,15 +644,26 @@ router.get('/monitor/status', requireAuth, async (req, res) => {
       `;
       
       output += `\n🌐 Properties (${properties.length}):\n`;
-      properties.forEach((prop, i) => {
+      for (let i = 0; i < properties.length; i++) {
+        const prop = properties[i];
         const daysAgo = Math.floor((new Date() - new Date(prop.latest)) / (1000 * 60 * 60 * 24));
         const freshness = daysAgo <= 2 ? '✅' : daysAgo <= 7 ? '⚠️' : '❌';
         
         output += `${i + 1}. ${prop.site_url}\n`;
         output += `   📅 ${prop.earliest.toISOString().split('T')[0]} to ${prop.latest.toISOString().split('T')[0]} (${prop.days} days)\n`;
         output += `   📈 ${prop.clicks.toLocaleString()} clicks, ${prop.impressions.toLocaleString()} impressions\n`;
+        
+        // Get queries and pages counts for this property
+        const queriesCount = await prisma.bingQueriesDaily.count({
+          where: { siteUrl: prop.site_url }
+        });
+        const pagesCount = await prisma.bingPagesDaily.count({
+          where: { siteUrl: prop.site_url }
+        });
+        
+        output += `   🔍 Queries: ${queriesCount.toLocaleString()}, 📄 Pages: ${pagesCount.toLocaleString()}\n`;
         output += `   ${freshness} ${daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : daysAgo + ' days ago'}\n`;
-      });
+      }
       
       // Data growth check
       const recentData = await prisma.bingTotalsDaily.findMany({
@@ -724,15 +735,27 @@ router.get('/monitor/dashboard', requireAuth, async (req, res) => {
       output += '❌ No Bing properties found with data\n';
       output += '💡 Properties need to be registered and data collection started\n\n';
     } else {
-      propertiesWithData.forEach((prop, index) => {
+      for (let index = 0; index < propertiesWithData.length; index++) {
+        const prop = propertiesWithData[index];
         output += `${index + 1}. 🌐 ${prop.site_url}\n`;
         output += `   📅 Date Range: ${prop.earliest_date.toISOString().split('T')[0]} to ${prop.latest_date.toISOString().split('T')[0]}\n`;
         output += `   📊 Total Days: ${prop.total_days}\n`;
         output += `   📈 Total Clicks: ${prop.total_clicks.toLocaleString()}\n`;
         output += `   👁️  Total Impressions: ${prop.total_impressions.toLocaleString()}\n`;
         output += `   📊 Avg CTR: ${(prop.avg_ctr * 100).toFixed(2)}%\n`;
-        output += `   🎯 Avg Position: ${prop.avg_position.toFixed(1)}\n\n`;
-      });
+        output += `   🎯 Avg Position: ${prop.avg_position.toFixed(1)}\n`;
+        
+        // Get queries and pages counts for this property
+        const queriesCount = await prisma.bingQueriesDaily.count({
+          where: { siteUrl: prop.site_url }
+        });
+        const pagesCount = await prisma.bingPagesDaily.count({
+          where: { siteUrl: prop.site_url }
+        });
+        
+        output += `   🔍 Total Queries: ${queriesCount.toLocaleString()}\n`;
+        output += `   📄 Total Pages: ${pagesCount.toLocaleString()}\n\n`;
+      }
     }
     
     // Summary statistics
