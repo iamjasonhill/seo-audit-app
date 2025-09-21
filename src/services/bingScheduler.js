@@ -112,7 +112,7 @@ class BingScheduler {
     logger.info('Bing Scheduler starting');
     this.timer = setInterval(() => this.tick().catch(e => logger.error('Bing scheduler tick error:', e.message)), intervalMs);
     // kick immediately
-    this.tick().catch(()=>{});
+    this.tick().catch(e => logger.error('Bing scheduler initial tick error:', e.message));
   }
 
   stop() {
