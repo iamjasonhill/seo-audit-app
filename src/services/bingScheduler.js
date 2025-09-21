@@ -260,6 +260,19 @@ class BingScheduler {
         }
       }
 
+      // After processing totals, also process queries and pages if totals are up to date
+      let queriesPagesProcessed = false;
+      if (await isUpToDate(siteUrl, 'web')) {
+        logger.info(`Bing Scheduler: Totals are up to date for ${siteUrl}, now processing queries and pages`);
+        try {
+          const queriesPagesResult = await this.processQueriesAndPages(siteUrl, userId, startDate, endDate);
+          queriesPagesProcessed = true;
+          logger.info(`Bing Scheduler: Queries/pages processing completed for ${siteUrl} - ${queriesPagesResult.processedChunks}/${queriesPagesResult.totalChunks} chunks`);
+        } catch (error) {
+          logger.error(`Bing Scheduler: Error processing queries/pages for ${siteUrl}:`, error.message);
+        }
+      }
+
       // Check if we're up to date or if we've hit the chunk limit
       let complete = true;
       let hitChunkLimit = chunksToProcess >= maxChunksPerRun;
@@ -273,14 +286,15 @@ class BingScheduler {
       
       // Schedule next sync based on completion status
       let next;
-      if (complete) {
-        // Fully up to date - schedule normal interval
+      if (complete && queriesPagesProcessed) {
+        // Fully up to date including queries/pages - schedule normal interval
         next = new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000);
-        logger.info(`Bing Scheduler: ${siteUrl} is fully up to date, scheduling normal interval`);
-      } else if (hitChunkLimit) {
-        // Hit chunk limit - schedule quick retry to continue processing
+        logger.info(`Bing Scheduler: ${siteUrl} is fully up to date (totals + queries/pages), scheduling normal interval`);
+      } else if (hitChunkLimit || !queriesPagesProcessed) {
+        // Hit chunk limit or still need to process queries/pages - schedule quick retry
         next = new Date(Date.now() + 2 * 60 * 1000); // 2 minutes
-        logger.info(`Bing Scheduler: ${siteUrl} hit chunk limit (${processedChunks}/${totalChunks} chunks processed), scheduling quick retry`);
+        const reason = hitChunkLimit ? 'chunk limit' : 'queries/pages processing needed';
+        logger.info(`Bing Scheduler: ${siteUrl} ${reason} (${processedChunks}/${totalChunks} chunks processed), scheduling quick retry`);
       } else {
         // Not complete but didn't hit limit - schedule normal retry
         next = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
