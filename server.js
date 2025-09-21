@@ -129,9 +129,21 @@ app.listen(PORT, async () => {
     await databaseService.connect();
     logger.info('Database connection established');
     if (process.env.SCHEDULER_ENABLED === 'true') {
-      gscScheduler.start(60000);
-      bingScheduler.start(300000); // 5 minutes for Bing
-      logger.info('GSC and Bing Schedulers enabled');
+      try {
+        gscScheduler.start(60000);
+        logger.info('GSC Scheduler started successfully');
+      } catch (error) {
+        logger.error('Failed to start GSC scheduler:', error);
+      }
+      
+      try {
+        bingScheduler.start(300000); // 5 minutes for Bing
+        logger.info('Bing Scheduler started successfully');
+      } catch (error) {
+        logger.error('Failed to start Bing scheduler:', error);
+      }
+      
+      logger.info('Scheduler initialization complete');
     }
   } catch (error) {
     logger.error('Failed to connect to database:', error);
