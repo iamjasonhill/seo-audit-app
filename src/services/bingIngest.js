@@ -465,11 +465,12 @@ class BingIngestService {
             continue;
           }
           
-          const pageUrl = page.Page || page.page || '';
+          // Bing API returns pages data in Query field (contains page URL)
+          const pageUrl = page.Query || page.query || page.Page || page.page || '';
           const clicks = parseInt(page.Clicks || page.clicks || 0);
           const impressions = parseInt(page.Impressions || page.impressions || 0);
-          const ctr = parseFloat(page.CTR || page.ctr || 0);
-          const position = parseFloat(page.Position || page.position || 0);
+          const ctr = parseFloat(page.CTR || page.ctr || page.AvgClickPosition || page.avgClickPosition || 0);
+          const position = parseFloat(page.Position || page.position || page.AvgImpressionPosition || page.avgImpressionPosition || 0);
 
           if (pageUrl) { // Store all pages with URLs, regardless of clicks
             recordsToInsert.push({

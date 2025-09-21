@@ -185,18 +185,18 @@ class BingScheduler {
         
         if (queriesCount === 0 || pagesCount === 0) {
           logger.info(`Bing Scheduler: Missing queries (${queriesCount}) or pages (${pagesCount}) data for ${siteUrl}, processing needed`);
-          
-          // Create a task to process queries and pages for the last 30 days
+
+          // Process queries and pages directly instead of creating a task
           const today = new Date();
           endDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()-2));
           startDate = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()-30));
 
-          tasks.push({
-            st: 'web',
-            startDate: iso(startDate),
-            endDate: iso(endDate),
-            historic: true
-          });
+          try {
+            const queriesPagesResult = await this.processQueriesAndPages(siteUrl, userId, startDate, endDate);
+            logger.info(`Bing Scheduler: Queries/pages processing completed for ${siteUrl} - ${queriesPagesResult.processedChunks}/${queriesPagesResult.totalChunks} chunks processed`);
+          } catch (error) {
+            logger.error(`Bing Scheduler: Error processing queries/pages for ${siteUrl}:`, error);
+          }
         } else {
           // Everything is up to date; schedule next interval
           const next = new Date(Date.now() + (prop.sync_interval_hours || 24) * 3600 * 1000);
