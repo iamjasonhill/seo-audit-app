@@ -111,12 +111,17 @@ class BingApiClient {
     
     // Try different possible endpoints and parameter combinations for query stats
     const possibleUrls = [
+      `${this.baseUrl}/GetSearchTerms?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`,
+      `${this.baseUrl}/GetSearchTerms?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}`,
+      `${this.baseUrl}/GetSearchTerms?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`,
+      `${this.baseUrl}/GetSearchTerms?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&rowLimit=${limit}`,
+      `${this.baseUrl}/GetSearchTerms?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&rowLimit=${limit}`,
+      // Try alternative endpoint names
       `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`,
       `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}`,
       `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`,
       `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&rowLimit=${limit}`,
       `${this.baseUrl}/GetQueryStats?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&rowLimit=${limit}`,
-      // Try alternative endpoint names
       `${this.baseUrl}/GetQueryPerformance?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}&limit=${limit}`,
       `${this.baseUrl}/GetQueryPerformance?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&searchType=${searchType}`,
       `${this.baseUrl}/GetQueryPerformance?apikey=${encodeURIComponent(this.apiKey)}&siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`
@@ -124,7 +129,7 @@ class BingApiClient {
     
     for (const url of possibleUrls) {
       try {
-        logger.info(`Trying Bing API GetQueryStats URL: ${url}`);
+        logger.info(`Trying Bing API GetQueryStats/GetSearchTerms URL: ${url}`);
         const resp = await axios.get(url);
         logger.info(`Bing API GetQueryStats response status: ${resp.status}`);
         logger.info(`Bing API GetQueryStats response data:`, JSON.stringify(resp.data, null, 2));
@@ -133,7 +138,7 @@ class BingApiClient {
           logger.info(`Found query data with URL: ${url}`);
           return data.d;
         } else if (data.d && data.d.length === 0) {
-          logger.info(`Query data endpoint working but no data returned: ${url}`);
+          logger.info(`Query/SearchTerms data endpoint working but no data returned: ${url}`);
           return [];
         }
       } catch (error) {
@@ -141,7 +146,7 @@ class BingApiClient {
       }
     }
     
-    logger.warn('No working GetQueryStats URL found');
+    logger.warn('No working GetQueryStats/GetSearchTerms URL found');
     return [];
   }
 
