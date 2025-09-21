@@ -58,7 +58,6 @@ async function fetchBingData(siteUrl, startDate, endDate) {
       });
       throw error;
     }
-  }
 
 async function storeBingData(siteUrl, startDate, endDate, data) {
   const searchType = 'web';
