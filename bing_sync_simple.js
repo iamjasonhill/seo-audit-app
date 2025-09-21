@@ -10,23 +10,31 @@ async function fetchBingData(siteUrl, startDate, endDate) {
   const results = {};
 
   try {
+    // Configure axios with proper authentication headers
+    const config = {
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
     // Fetch totals
     logger.info(`Fetching totals for ${siteUrl} (${startDate} to ${endDate})`);
-    const totalsUrl = `${BASE_URL}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
-    const totalsResponse = await axios.get(totalsUrl);
+    const totalsUrl = `${BASE_URL}/GetSiteStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
+    const totalsResponse = await axios.get(totalsUrl, config);
     results.totals = totalsResponse.data.d || [];
 
     // Fetch queries
     logger.info(`Fetching queries for ${siteUrl}`);
-    const queriesUrl = `${BASE_URL}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
-    const queriesResponse = await axios.get(queriesUrl);
+    const queriesUrl = `${BASE_URL}/GetQueryStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
+    const queriesResponse = await axios.get(queriesUrl, config);
     results.queries = queriesResponse.data.d || [];
 
     // Fetch pages (handle 404 gracefully)
     logger.info(`Fetching pages for ${siteUrl}`);
-    const pagesUrl = `${BASE_URL}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}&apiKey=${API_KEY}`;
+    const pagesUrl = `${BASE_URL}/GetPageStats?siteUrl=${encodeURIComponent(siteUrl)}&startDate=${startDate}&endDate=${endDate}`;
     try {
-      const pagesResponse = await axios.get(pagesUrl);
+      const pagesResponse = await axios.get(pagesUrl, config);
       results.pages = pagesResponse.data.d || [];
     } catch (err) {
       if (err.response?.status === 404) {
@@ -40,6 +48,7 @@ async function fetchBingData(siteUrl, startDate, endDate) {
     return results;
   } catch (error) {
     logger.error(`Error fetching Bing data for ${siteUrl}:`, error.message);
+    logger.error(`Error details:`, error.response?.data || error.message);
     throw error;
   }
 }
