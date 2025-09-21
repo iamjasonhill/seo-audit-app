@@ -310,7 +310,7 @@ class BingIngestService {
           const ctr = parseFloat(query.CTR || query.ctr || 0);
           const position = parseFloat(query.Position || query.position || 0);
 
-          if (queryText && clicks > 0) { // Only store queries with actual clicks
+          if (queryText) { // Store all queries with text, regardless of clicks
             recordsToInsert.push({
               siteUrl,
               date,
@@ -471,7 +471,7 @@ class BingIngestService {
           const ctr = parseFloat(page.CTR || page.ctr || 0);
           const position = parseFloat(page.Position || page.position || 0);
 
-          if (pageUrl && clicks > 0) { // Only store pages with actual clicks
+          if (pageUrl) { // Store all pages with URLs, regardless of clicks
             recordsToInsert.push({
               siteUrl,
               date,
