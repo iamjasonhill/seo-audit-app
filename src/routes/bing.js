@@ -368,6 +368,29 @@ router.delete('/sync/unregister', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/bing/sync/simple - Simple Bing sync (for cron jobs and manual testing)
+router.get('/sync/simple', async (req, res) => {
+  try {
+    // Allow both cron jobs (no auth) and authenticated requests
+    const isCronJob = req.headers['x-vercel-cron'] === 'true' ||
+                      req.headers['user-agent']?.includes('vercel-cron');
+
+    // If it's not a cron job and no auth, require authentication
+    if (!isCronJob && !req.headers.authorization) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Import and run the simple sync
+    const { syncAllSites } = require('../../bing_sync_simple');
+    const results = await syncAllSites();
+
+    res.json({ success: true, message: 'Simple Bing sync completed', results });
+  } catch (err) {
+    logger.error('Simple Bing sync error:', err.message);
+    res.status(500).json({ error: 'SimpleBingSyncError', message: err.message });
+  }
+});
+
 // GET /api/bing/scheduler/tick - Manual scheduler tick (for testing and cron jobs)
 router.get('/scheduler/tick', async (req, res) => {
   try {

@@ -303,7 +303,7 @@ class BingScheduler {
           startDate: chunkStart,
           endDate: chunkEnd,
           includeQueries: queriesCount === 0, // Process queries if missing
-          includePages: pagesCount === 0,     // Process pages if missing
+          includePages: true,                 // Always process pages (Bing pages)
           includeTotals: true                 // Always process totals
         });
           

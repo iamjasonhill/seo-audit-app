@@ -13,8 +13,7 @@
     }
   ],
   "crons": [
-    { "path": "/api/gsc/scheduler/tick", "schedule": "*/5 * * * *" },
-    { "path": "/api/bing/scheduler/tick", "schedule": "*/1 * * * *" }
+    { "path": "/api/bing/sync/simple", "schedule": "*/1 * * * *" }
   ],
   "env": {
     "NODE_ENV": "production"

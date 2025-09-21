@@ -14,6 +14,7 @@ const errorHandler = require('./src/middleware/errorHandler');
 const databaseService = require('./src/services/database');
 const gscScheduler = require('./src/services/gscScheduler');
 const bingScheduler = require('./src/services/bingScheduler');
+const bingSyncSimple = require('./bing_sync_simple');
 
 // Import routes
 const auditRoutes = require('./src/routes/audit');
