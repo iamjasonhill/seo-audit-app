@@ -421,10 +421,12 @@ class BingIngestService {
       const pageData = await Promise.race([apiPromise, timeoutPromise]);
       
       if (!pageData || pageData.length === 0) {
-        logger.warn(`No Bing page data found for ${siteUrl}`);
+        logger.warn(`No Bing page data found for ${siteUrl} - API returned:`, pageData);
         await this.updateSyncStatus(siteUrl, searchType, dimension, 'ok', 'No data available');
         return { success: true, recordsProcessed: 0 };
       }
+      
+      logger.info(`Bing API returned ${pageData.length} page records for ${siteUrl}`);
 
       let recordsProcessed = 0;
       const batchSize = 50; // Process in batches to avoid memory issues
