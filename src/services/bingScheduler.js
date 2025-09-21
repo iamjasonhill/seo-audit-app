@@ -269,7 +269,7 @@ class BingScheduler {
           queriesPagesProcessed = true;
           logger.info(`Bing Scheduler: Queries/pages processing completed for ${siteUrl} - ${queriesPagesResult.processedChunks}/${queriesPagesResult.totalChunks} chunks`);
         } catch (error) {
-          logger.error(`Bing Scheduler: Error processing queries/pages for ${siteUrl}:`, error.message);
+          logger.error(`Bing Scheduler: Error processing queries/pages for ${siteUrl}:`, error);
         }
       }
 
@@ -545,7 +545,7 @@ class BingScheduler {
       return { processedChunks, totalChunks: chunksToProcess };
       
     } catch (error) {
-      logger.error(`Bing Scheduler: Error processing queries/pages for ${siteUrl}:`, error.message);
+      logger.error(`Bing Scheduler: Error processing queries/pages for ${siteUrl}:`, error);
       throw error;
     }
   }
