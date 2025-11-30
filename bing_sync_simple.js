@@ -59,6 +59,12 @@ async function fetchBingData(siteUrl, startDate, endDate) {
       throw error;
     }
 
+  } catch (error) {
+    logger.error(`Error in fetchBingData:`, error);
+    throw error;
+  }
+}
+
 async function storeBingData(siteUrl, startDate, endDate, data) {
   const searchType = 'web';
   let totalsProcessed = 0;
